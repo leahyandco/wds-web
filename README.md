@@ -19,7 +19,29 @@ document.
 - **Remote mode** (development): the API connects to the WDS server over WinRM.
 
 Server-wide settings exist only in WDSUTIL, which prints English text; `WdsUtilOutputParser` turns it
-into a tree.
+into a tree. The driver store comes from WDSUTIL too: `Get-WdsDriverPackage` only returns some
+packages.
+
+## Importing images
+
+Boot and install images can be imported from an upload or from an .iso, .wim or .esd already on the
+WDS server (the Import button on the image pages).
+
+- **Uploads** go in 8 MB chunks to a staging folder on the WDS server, `C:\WdsWeb\Staging` by
+  default (`Wds:StagingPath`), outside RemoteInstall. In Remote mode the API writes there through
+  the server's `C$` share with the same credential. A failed chunk is retried, and an unfinished
+  upload of the same file carries on where it stopped.
+- **Reading** an ISO mounts it read-only for a few seconds and lists the images in
+  `sources\boot.wim` and `sources\install.wim`/`.esd`.
+- **Imports** run one at a time in the background; the image pages show their progress and log.
+  An .esd, or a boot image that isn't the one marked bootable, is exported to a temporary .wim
+  first, since WDS can't import those directly.
+- **Space**: RemoteInstall and the staging folder are usually on the same drive. An install image
+  in a new image group needs about the size of its .wim, because it can't share files with images
+  in other groups.
+
+Files are offered from `C:\Users\*\Downloads`, `C:\ISO`, `C:\ISOs` and `C:\Images` on the server
+unless `Wds:ImageSearchPaths` says otherwise.
 
 ## Development
 

@@ -20,6 +20,19 @@ const releases: [build: number, name: string][] = [
   [9600, 'Windows 8.1 / Server 2012 R2'],
 ]
 
+// Feature-update names by exact build, for naming install images ("Windows 11 Pro 25H2").
+const tags: Record<number, string> = {
+  28000: '26H1', 26200: '25H2', 26100: '24H2', 22631: '23H2', 22621: '22H2', 22000: '21H2',
+  19045: '22H2', 19044: '21H2', 19043: '21H1', 19042: '20H2', 19041: '2004', 18363: '1909', 18362: '1903',
+  17763: '1809', 17134: '1803', 16299: '1709', 15063: '1703', 14393: '1607', 10240: '1507',
+}
+
+/** The feature update a build is, e.g. "10.0.26200.8328" → "25H2". */
+export function releaseTag(version: unknown): string | null {
+  if (typeof version !== 'string') return null
+  return tags[Number(version.split('.')[2])] ?? null
+}
+
 /** The Windows release a build belongs to, e.g. "10.0.19041" → "Windows 10 2004–22H2". */
 export function windowsRelease(version: unknown): string | null {
   if (typeof version !== 'string') return null

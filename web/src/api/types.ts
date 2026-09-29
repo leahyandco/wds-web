@@ -47,6 +47,130 @@ export interface Devices {
   errors: string[]
 }
 
+export interface DriverPackage {
+  id: string
+  name: string
+  architecture: string | null
+  className: string | null
+  classGuid: string | null
+  provider: string | null
+  version: string | null
+  /** The driver's own date, yyyy-MM-dd. */
+  date: string | null
+  /** When it was added to WDS, in the server's local time. */
+  dateAdded: string | null
+  enabled: boolean
+  signed: boolean
+  infPath: string | null
+  locale: string | null
+  groups: string[]
+}
+
+export interface DriverGroup {
+  name: string
+  id: string | null
+  applicability: string | null
+  enabled: boolean
+  packageCount: number
+}
+
+export interface DriverCatalog {
+  groups: DriverGroup[]
+  packages: DriverPackage[]
+}
+
+export type ImageKind = 'boot' | 'install'
+
+export interface UploadInfo {
+  id: string
+  fileName: string
+  size: number
+  received: number
+  createdAt: string
+  /** Where the file is on the WDS server. */
+  serverPath: string
+  complete: boolean
+}
+
+/** An .iso, .wim or .esd found on the WDS server. */
+export interface ServerImageFile {
+  path: string
+  size: number
+  modified: string
+}
+
+/** One image inside a .wim or .esd. */
+export interface ImageEntry {
+  index: number
+  name: string
+  description: string | null
+  size: number
+  architecture: string
+  version: string
+  editionId: string | null
+  installationType: string | null
+  languages: string[]
+  bootable: boolean
+  modified: string | null
+}
+
+export interface ImageFileEntry {
+  /** For an ISO, the file inside it, e.g. sources\install.wim. */
+  innerPath: string | null
+  role: ImageKind
+  format: string
+  size: number
+  images: ImageEntry[]
+}
+
+/** What's inside a file that could be imported. */
+export interface ImageFileInfo {
+  path: string
+  name: string
+  size: number
+  format: 'iso' | 'wim' | 'esd'
+  label: string | null
+  warning: string | null
+  files: ImageFileEntry[]
+}
+
+export interface ImportRequestBody {
+  uploadId?: string
+  serverPath?: string
+  innerPath?: string | null
+  kind: ImageKind
+  index: number
+  imageGroup?: string
+  createGroup?: boolean
+  name: string
+  description?: string
+  fileName?: string
+  deleteUploadAfter?: boolean
+}
+
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+
+export interface ImportJob {
+  id: string
+  request: {
+    sourcePath: string
+    innerPath: string | null
+    kind: ImageKind
+    index: number
+    imageGroup: string | null
+    name: string
+    fileName: string
+  }
+  status: JobStatus
+  stage: string | null
+  percent: number | null
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+  error: string | null
+  log: { time: string; text: string }[]
+}
+
 export interface WdsEvent {
   time: string
   id: number

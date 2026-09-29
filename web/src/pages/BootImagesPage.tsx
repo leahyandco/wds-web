@@ -1,6 +1,11 @@
-import { Card } from '@mantine/core'
+import { Button, Card } from '@mantine/core'
+import { IconFileImport } from '@tabler/icons-react'
+import { useState } from 'react'
 import { useBootImages } from '../api/queries'
 import { EnabledBadge, NameCell, VersionCell } from '../components/Cells'
+import { ImageActionsMenu } from '../components/ImageActionsMenu'
+import { ImportImageDialog } from '../components/ImportImageDialog'
+import { ImportJobs } from '../components/ImportJobs'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { RecordTable, type RecordColumn } from '../components/RecordTable'
@@ -20,10 +25,12 @@ const columns: RecordColumn[] = [
     nowrap: true,
     render: (row) => formatDateTime(asString(row.LastModificationTime)),
   },
+  { key: 'actions', label: '', render: (row) => <ImageActionsMenu kind="boot" image={row} /> },
 ]
 
 export function BootImagesPage() {
   const query = useBootImages()
+  const [importing, setImporting] = useState(false)
 
   return (
     <>
@@ -32,7 +39,13 @@ export function BootImagesPage() {
         description="WinPE images that PXE clients boot into."
         onRefresh={() => void query.refetch()}
         refreshing={query.isFetching}
+        actions={
+          <Button leftSection={<IconFileImport size={16} />} onClick={() => setImporting(true)}>
+            Import
+          </Button>
+        }
       />
+      <ImportJobs kind="boot" />
       <Card withBorder p={0}>
         <QueryState query={query}>
           {(rows) => (
@@ -45,6 +58,7 @@ export function BootImagesPage() {
           )}
         </QueryState>
       </Card>
+      <ImportImageDialog kind="boot" opened={importing} onClose={() => setImporting(false)} />
     </>
   )
 }

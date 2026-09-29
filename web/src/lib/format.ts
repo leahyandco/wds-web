@@ -31,6 +31,23 @@ export function formatBytes(bytes: number | null | undefined): string {
 
 export const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
 
+/** "1:05" or "12 s", for how long something has taken or will take. */
+export function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return EMPTY
+  if (seconds < 60) return `${Math.round(seconds)} s`
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.round(seconds % 60)
+  if (minutes < 60) return `${minutes}:${String(rest).padStart(2, '0')}`
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`
+}
+
+/** A WDS-friendly file name from an image name, matching the API's suggestion. */
+export function suggestFileName(name: string): string {
+  let slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  if (slug.length > 60) slug = slug.slice(0, 60).replace(/-+$/, '')
+  return `${slug || 'image'}.wim`
+}
+
 const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
 /** "5 minutes ago", "yesterday", and so on. */
