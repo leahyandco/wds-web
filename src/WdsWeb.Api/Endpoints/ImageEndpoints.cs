@@ -43,9 +43,9 @@ public static class ImageEndpoints
             }, timeout: InspectTimeout, ct: ct));
 
         // Imports run in the background, one at a time; the UI polls the job.
-        api.MapPost("/images/import", (ImportImageRequest request, UploadStore uploads, ImportQueue queue) =>
+        api.MapPost("/images/import", (ImportImageRequest request, HttpContext http, UploadStore uploads, ImportQueue queue) =>
         {
-            var job = queue.Enqueue(ImportValidation.Validate(request, uploads));
+            var job = queue.Enqueue(ImportValidation.Validate(request, uploads, http.User.Identity?.Name));
             return Results.Accepted($"/api/jobs/{job.Id}", job);
         });
         api.MapGet("/jobs", (ImportQueue queue) => queue.List());

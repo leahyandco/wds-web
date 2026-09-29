@@ -19,7 +19,7 @@ public sealed record ImportImageRequest(
 /// <summary>Turns what the UI asked for into an <see cref="ImportRequest"/>, or explains what's wrong with it.</summary>
 public static partial class ImportValidation
 {
-    public static ImportRequest Validate(ImportImageRequest request, UploadStore uploads)
+    public static ImportRequest Validate(ImportImageRequest request, UploadStore uploads, string? requestedBy = null)
     {
         string sourcePath;
         if (!string.IsNullOrWhiteSpace(request.UploadId))
@@ -68,7 +68,8 @@ public static partial class ImportValidation
             sourcePath, innerPath, request.Kind, request.Index, group, request.CreateGroup, name,
             string.IsNullOrEmpty(description) ? null : description, fileName,
             string.IsNullOrWhiteSpace(request.UploadId) ? null : request.UploadId,
-            request.DeleteUploadAfter && !string.IsNullOrWhiteSpace(request.UploadId));
+            request.DeleteUploadAfter && !string.IsNullOrWhiteSpace(request.UploadId),
+            requestedBy);
     }
 
     /// <summary>A full path on the WDS server, such as C:\ISO\Win11.iso, or a UNC path it can reach.</summary>

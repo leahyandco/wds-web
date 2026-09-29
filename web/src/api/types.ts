@@ -1,3 +1,12 @@
+export interface SessionInfo {
+  /** False in development, where there's no sign-in. */
+  authEnabled: boolean
+  authenticated: boolean
+  userName: string | null
+  /** The WDS server this console manages. */
+  server: string
+}
+
 export interface ConnectionInfo {
   mode: 'Local' | 'Remote'
   target: string

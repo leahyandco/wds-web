@@ -74,8 +74,30 @@ Use `--launch-profile local` instead to manage WDS on the machine the API runs o
 Tests: `dotnet test WdsWeb.slnx`. Frontend checks: `npm run build --prefix web` and
 `npm run lint --prefix web`.
 
-## Production build
+## Installing on the WDS server
 
-`npm run build --prefix web` writes the frontend into `src/WdsWeb.Api/wwwroot`, and the API serves it
-from there, so one process serves everything. Hosting it as a Windows service with authentication
-comes later.
+```powershell
+.\deploy\Deploy-WdsWeb.ps1                 # defaults: -ComputerName wds01 -Port 8443
+```
+
+The script builds the frontend (into `src/WdsWeb.Api/wwwroot`), publishes a self-contained build so
+the server needs no .NET runtime, and installs it as the **WdsWeb** service on the server, running
+as LocalSystem in Local mode. On the first run it also creates a self-signed HTTPS certificate for
+the server's names and addresses, `C:\ProgramData\WdsWeb\settings.json` (port and certificate
+thumbprint), the "WDS Console" event log source and a firewall rule. Later runs only replace the
+program files and restart the service.
+
+- **Address**: `https://wds01:8443/`. Browsers warn about the self-signed certificate until it's
+  trusted; export it from `LocalMachine\My` on the server ("WDS Console") and import it into Trusted
+  Root Certification Authorities on the machines that use the console.
+- **Sign-in**: Windows accounts on the server, local or domain (`CONTOSO\you`, `you@contoso.com`).
+  Only members of the server's local Administrators group get in by default; to allow others, add
+  `"Auth": { "AllowedGroups": ["CONTOSO\\WDS Admins"] }` to `settings.json` and restart the service.
+  Ten attempts per address per five minutes.
+- **Audit**: sign-ins and every change (imports, image actions, settings) go to the server's
+  Application event log under the source "WDS Console".
+- **Machine settings** in `C:\ProgramData\WdsWeb\settings.json` override `appsettings.json` and survive
+  updates. Cookie keys are kept in `C:\ProgramData\WdsWeb\keys`.
+
+In development sign-in is off (`appsettings.Development.json`), since the API only listens on
+localhost there.

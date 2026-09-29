@@ -3,7 +3,9 @@ import {
   AppShell,
   Badge,
   Burger,
+  Button,
   Group,
+  Menu,
   NavLink,
   Title,
   Tooltip,
@@ -18,13 +20,16 @@ import {
   IconHistory,
   IconLayoutDashboard,
   IconListDetails,
+  IconLogout,
   IconMoon,
   IconRocket,
   IconSettings,
   IconSun,
+  IconUser,
 } from '@tabler/icons-react'
 import { Outlet, NavLink as RouterNavLink, useLocation } from 'react-router'
-import { useConnection, useTarget } from '../api/queries'
+import { useConnection, useSignOut, useTarget } from '../api/queries'
+import type { SessionInfo } from '../api/types'
 
 const links = [
   { to: '/', label: 'Dashboard', icon: IconLayoutDashboard },
@@ -37,7 +42,7 @@ const links = [
   { to: '/events', label: 'Events', icon: IconListDetails },
 ]
 
-export function AppLayout() {
+export function AppLayout({ session }: { session: SessionInfo }) {
   const [opened, { toggle, close }] = useDisclosure()
   const { pathname } = useLocation()
 
@@ -55,6 +60,7 @@ export function AppLayout() {
           </Group>
           <Group gap="sm" wrap="nowrap">
             <ServerStatus />
+            {session.authEnabled && session.userName && <UserMenu userName={session.userName} />}
             <ColorSchemeToggle />
           </Group>
         </Group>
@@ -100,6 +106,24 @@ function ServerStatus() {
         {connection.data?.mode === 'Remote' ? ' (remote)' : ''}
       </Badge>
     </Tooltip>
+  )
+}
+
+function UserMenu({ userName }: { userName: string }) {
+  const signOut = useSignOut()
+  return (
+    <Menu position="bottom-end" withinPortal>
+      <Menu.Target>
+        <Button variant="default" leftSection={<IconUser size={16} />} loading={signOut.isPending} visibleFrom="sm">
+          {userName}
+        </Button>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item leftSection={<IconLogout size={14} />} onClick={() => signOut.mutate()}>
+          Sign out
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
   )
 }
 

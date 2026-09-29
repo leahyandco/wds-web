@@ -1,0 +1,68 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Logging;
+
+namespace WdsWeb.Api.Tests;
+
+/// <summary>
+/// With sign-in on (the production default), nothing that touches WDS answers an anonymous request.
+/// These never reach a WDS server: the requests stop at authorization.
+/// </summary>
+public sealed class SignInRequiredTests(SignInRequiredTests.ProductionApp app) : IClassFixture<SignInRequiredTests.ProductionApp>
+{
+    public sealed class ProductionApp : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Production");
+            // Keep test runs out of the machine's event log.
+            builder.ConfigureLogging(logging => logging.ClearProviders());
+        }
+    }
+
+    private readonly HttpClient _client = app.CreateClient();
+
+    [Theory]
+    [InlineData("GET", "/api/connection")]
+    [InlineData("GET", "/api/boot-images")]
+    [InlineData("GET", "/api/server/config")]
+    [InlineData("GET", "/api/uploads")]
+    [InlineData("POST", "/api/boot-images/remove")]
+    [InlineData("PUT", "/api/server/settings/pxe")]
+    [InlineData("POST", "/api/server/restart")]
+    [InlineData("POST", "/api/images/import")]
+    public async Task Refuses_anonymous_requests(string method, string path)
+    {
+        var response = await _client.SendAsync(new HttpRequestMessage(new HttpMethod(method), path) { Content = JsonContent.Create(new { }) });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Answers_the_health_check_without_sign_in()
+    {
+        var response = await _client.GetAsync("/api/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Says_nobody_is_signed_in()
+    {
+        var session = await _client.GetFromJsonAsync<JsonElement>("/api/auth/me");
+
+        Assert.True(session.GetProperty("authEnabled").GetBoolean());
+        Assert.False(session.GetProperty("authenticated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Rejects_an_empty_sign_in_without_trying_windows()
+    {
+        var response = await _client.PostAsJsonAsync("/api/auth/login", new { userName = "", password = "" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+}

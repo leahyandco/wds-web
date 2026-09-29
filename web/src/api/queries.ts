@@ -13,11 +13,43 @@ import type {
   InstallImages,
   ServerConfig,
   ServerImageFile,
+  SessionInfo,
   SettingsGroup,
   SettingsResult,
   TargetInfo,
   WdsRecord,
 } from './types'
+
+export const useSession = () =>
+  useQuery({
+    queryKey: ['session'],
+    queryFn: ({ signal }) => apiGet<SessionInfo>('/auth/me', signal),
+    staleTime: Infinity,
+    retry: false,
+  })
+
+export const useSignIn = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (credentials: { userName: string; password: string }) => apiSend<SessionInfo>('POST', '/auth/login', credentials),
+    onSuccess: (session) => {
+      queryClient.setQueryData(['session'], session)
+      // Anything fetched before signing in failed with 401; fetch it again.
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] !== 'session' })
+    },
+  })
+}
+
+export const useSignOut = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiSend('POST', '/auth/logout'),
+    onSuccess: () => {
+      queryClient.clear()
+      void queryClient.invalidateQueries({ queryKey: ['session'] })
+    },
+  })
+}
 
 export const useConnection = () =>
   useQuery({

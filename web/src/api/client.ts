@@ -42,7 +42,11 @@ export async function apiPutBytes<T>(path: string, bytes: Blob, signal?: AbortSi
   return (await response.json()) as T
 }
 
+/** Fired when the server says the session is gone, so the app can show the sign-in page. */
+export const SIGNED_OUT_EVENT = 'wdsweb:signed-out'
+
 async function toApiError(response: Response): Promise<ApiError> {
+  if (response.status === 401 && !response.url.endsWith('/api/auth/login')) window.dispatchEvent(new Event(SIGNED_OUT_EVENT))
   try {
     const problem = (await response.json()) as Record<string, unknown>
     const message = (problem.detail ?? problem.title ?? response.statusText) as string

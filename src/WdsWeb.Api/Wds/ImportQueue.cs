@@ -13,6 +13,7 @@ public enum JobStatus { Queued, Running, Succeeded, Failed }
 /// <param name="InnerPath">For an ISO, the image file inside it, e.g. sources\install.wim.</param>
 /// <param name="Index">Which image in the file (1-based).</param>
 /// <param name="UploadId">The upload the source came from, if any, so it can be deleted afterwards.</param>
+/// <param name="RequestedBy">The signed-in user who asked for the import.</param>
 public sealed record ImportRequest(
     string SourcePath,
     string? InnerPath,
@@ -24,7 +25,8 @@ public sealed record ImportRequest(
     string? Description,
     string FileName,
     string? UploadId,
-    bool DeleteUploadAfter);
+    bool DeleteUploadAfter,
+    string? RequestedBy = null);
 
 public sealed record JobLogLine(DateTimeOffset Time, string Text);
 
@@ -80,7 +82,8 @@ public sealed class ImportQueue(
     {
         var request = job.Request;
         job.Start();
-        logger.LogInformation("Importing {Kind} image {Name} from {Source}", request.Kind, request.Name, request.SourcePath);
+        if (request.RequestedBy is not null) job.Message($"Requested by {request.RequestedBy}");
+        logger.LogInformation("Importing {Kind} image {Name} from {Source} for {User}", request.Kind, request.Name, request.SourcePath, request.RequestedBy);
         try
         {
             var result = await wds.RunJobAsync("Import-WdsImage", new Dictionary<string, object?>
