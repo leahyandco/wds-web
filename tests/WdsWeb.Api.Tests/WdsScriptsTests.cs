@@ -35,6 +35,8 @@ public class WdsScriptsTests
     [InlineData("Get-ImageFileInfo")]
     [InlineData("Import-WdsImage")]
     [InlineData("Invoke-WdsImageAction")]
+    [InlineData("Set-WdsServerSettings")]
+    [InlineData("Restart-WdsService")]
     public void The_scripts_the_endpoints_use_are_embedded(string name)
     {
         Assert.NotEmpty(WdsScripts.Get(name));

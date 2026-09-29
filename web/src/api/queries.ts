@@ -13,6 +13,8 @@ import type {
   InstallImages,
   ServerConfig,
   ServerImageFile,
+  SettingsGroup,
+  SettingsResult,
   TargetInfo,
   WdsRecord,
 } from './types'
@@ -125,6 +127,26 @@ export const useImageAction = () => {
       apiSend('POST', `/${kind === 'boot' ? 'boot-images' : 'install-images'}/${action}`, image),
     onSuccess: (_, input) =>
       queryClient.invalidateQueries({ queryKey: [input.kind === 'boot' ? 'boot-images' : 'install-images'] }),
+  })
+}
+
+export const useApplySettings = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ group, body }: { group: SettingsGroup; body: unknown }) =>
+      apiSend<SettingsResult>('PUT', `/server/settings/${group}`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['server-config'] }),
+  })
+}
+
+export const useRestartWds = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiSend<{ status: string }>('POST', '/server/restart'),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['target'] })
+      void queryClient.invalidateQueries({ queryKey: ['server-config'] })
+    },
   })
 }
 

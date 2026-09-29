@@ -63,6 +63,10 @@ public static partial class WdsUtilOutputParser
         var listItem = ListItem().Match(content);
         if (listItem.Success) return (listItem.Groups["name"].Value, NullIfEmpty(listItem.Groups["value"].Value));
 
+        // Registered bind-policy interfaces: "MAC => 00B056882FDC" or "IP => 192.0.2.10".
+        var mapping = Mapping().Match(content);
+        if (mapping.Success) return (mapping.Groups["name"].Value, mapping.Groups["value"].Value);
+
         // "Label: value". Split at the first ": " so values such as C:\RemoteInstall survive.
         var separator = content.IndexOf(": ", StringComparison.Ordinal);
         if (separator > 0) return (content[..separator].Trim(), NullIfEmpty(content[(separator + 2)..]));
@@ -74,6 +78,9 @@ public static partial class WdsUtilOutputParser
 
     [GeneratedRegex(@"^(?<name>[A-Za-z0-9]+)\s+-(?:\s+(?<value>.*))?$")]
     private static partial Regex ListItem();
+
+    [GeneratedRegex(@"^(?<name>[A-Za-z0-9]+)\s+=>\s+(?<value>\S.*)$")]
+    private static partial Regex Mapping();
 
     private sealed class Builder(string name, string? value)
     {

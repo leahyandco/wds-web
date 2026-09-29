@@ -31,6 +31,22 @@ export interface ServerConfig {
   remoteInstall: { path: string; totalBytes: number; freeBytes: number } | null
   /** 1 = the insecure hands-free override is on, 0 = explicitly off, null = the update's default (off). */
   allowHandsFreeFunctionality: number | null
+  /** Boot program files under RemoteInstall, e.g. Boot\x64\wdsmgfw.efi. */
+  bootPrograms: string[]
+  interfaces: ServerInterface[]
+}
+
+export interface ServerInterface {
+  name: string
+  ipAddress: string
+  macAddress: string | null
+  status: string | null
+}
+
+export type SettingsGroup = 'pxe' | 'boot' | 'client' | 'pending-devices' | 'bind' | 'transport'
+
+export interface SettingsResult {
+  applied: { command: string; message: string }[]
 }
 
 /** A WDS object as the WDS module reports it: CIM property names, values reduced to JSON. */

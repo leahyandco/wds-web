@@ -29,6 +29,7 @@ app.UseStaticFiles(staticFiles);
 
 app.MapWdsEndpoints();
 app.MapImageEndpoints();
+app.MapSettingsEndpoints();
 app.MapFallbackToFile("index.html", staticFiles);
 
 app.Run();

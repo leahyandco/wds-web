@@ -27,7 +27,9 @@ public static class WdsEndpoints
                 WdsUtilOutputParser.Parse(output),
                 output,
                 result.GetProperty("remoteInstall"),
-                result.GetProperty("allowHandsFreeFunctionality"));
+                result.GetProperty("allowHandsFreeFunctionality"),
+                result.GetProperty("bootPrograms"),
+                result.GetProperty("interfaces"));
         });
 
         api.MapGet("/boot-images", (WdsScriptRunner wds, CancellationToken ct) =>
@@ -78,12 +80,16 @@ public static class WdsEndpoints
 
 public sealed record ConnectionResponse(string Mode, string Target);
 
+/// <param name="BootPrograms">Boot program files under RemoteInstall, as paths relative to it.</param>
+/// <param name="Interfaces">The server's IPv4 interfaces, for the bind policy.</param>
 public sealed record ServerConfigResponse(
     int WdsUtilExitCode,
     IReadOnlyList<WdsUtilNode> Sections,
     string Raw,
     JsonElement RemoteInstall,
-    JsonElement AllowHandsFreeFunctionality);
+    JsonElement AllowHandsFreeFunctionality,
+    JsonElement BootPrograms,
+    JsonElement Interfaces);
 
 /// <param name="LogStartsAt">The oldest event in the Operational log: boots before this can't be shown.</param>
 public sealed record ActivityResponse(IReadOnlyList<BootSession> Sessions, DateTimeOffset? LogStartsAt, long LogMaxBytes);
