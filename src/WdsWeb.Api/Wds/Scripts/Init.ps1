@@ -108,6 +108,50 @@ function global:ConvertTo-WdsJson {
     ConvertTo-Json -InputObject $InputObject -Depth 12 -Compress
 }
 
+# Mounts an ISO read-only and returns its root (e.g. E:\), and whether this call mounted it, so the
+# caller knows whether to dismount it. An ISO that's already mounted is used where it is.
+function global:Mount-WdsIso {
+    param([Parameter(Mandatory)] [string] $Path)
+
+    $image = Get-DiskImage -ImagePath $Path
+    $mountedHere = -not $image.Attached
+    if ($mountedHere) { $image = Mount-DiskImage -ImagePath $Path -StorageType ISO -Access ReadOnly -PassThru }
+    # Windows can take a moment to give the volume a drive letter.
+    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+        $volume = $image | Get-Volume -ErrorAction SilentlyContinue
+        if ($volume.DriveLetter) {
+            return [pscustomobject]@{ Root = "$($volume.DriveLetter):\"; Label = $volume.FileSystemLabel; MountedHere = $mountedHere }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    if ($mountedHere) { Dismount-DiskImage -ImagePath $Path | Out-Null }
+    throw "Mounted $Path, but Windows didn't give it a drive letter."
+}
+
+# Every image in a .wim or .esd, with what's needed to choose one to import.
+function global:Get-WdsImageIndexes {
+    param([Parameter(Mandatory)] [string] $ImagePath)
+
+    $architectures = @{ 0 = 'x86'; 5 = 'arm'; 6 = 'ia64'; 9 = 'x64'; 12 = 'arm64' }
+    , @(Get-WindowsImage -ImagePath $ImagePath | ForEach-Object {
+        $image = Get-WindowsImage -ImagePath $ImagePath -Index $_.ImageIndex
+        $architecture = [int]$image.Architecture
+        [ordered]@{
+            index            = [int]$image.ImageIndex
+            name             = $image.ImageName
+            description      = $image.ImageDescription
+            size             = [int64]$image.ImageSize
+            architecture     = if ($architectures.ContainsKey($architecture)) { $architectures[$architecture] } else { "$architecture" }
+            version          = "$($image.Version)"
+            editionId        = $image.EditionId
+            installationType = $image.InstallationType
+            languages        = @($image.Languages)
+            bootable         = "$($image.ImageBootable)" -eq 'Yes'
+            modified         = if ($image.ModifiedTime) { $image.ModifiedTime.ToUniversalTime().ToString('o') } else { $null }
+        }
+    })
+}
+
 # WDSUTIL only prints localized text, which the web service parses. Native stderr must not become a
 # terminating error, so this runs with ErrorActionPreference Continue and returns the exit code too.
 function global:Invoke-WdsUtil {

@@ -34,4 +34,22 @@ public sealed class WdsOptions
     public int PoolSize { get; set; } = 3;
 
     public TimeSpan CommandTimeout { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// A folder on the WDS server for uploads and for temporary files during imports. It's kept out
+    /// of RemoteInstall, which WDS owns and serves over TFTP.
+    /// </summary>
+    public string StagingPath { get; set; } = @"C:\WdsWeb\Staging";
+
+    /// <summary>
+    /// Folders on the WDS server to offer .iso, .wim and .esd files from, wildcards allowed. Left
+    /// empty, <see cref="DefaultImageSearchPaths"/> is used. (Not defaulted here because the
+    /// configuration binder appends to an array rather than replacing it.)
+    /// </summary>
+    public string[] ImageSearchPaths { get; set; } = [];
+
+    public static readonly string[] DefaultImageSearchPaths = [@"C:\Users\*\Downloads", @"C:\ISO", @"C:\ISOs", @"C:\Images"];
+
+    /// <summary>How long a single job, such as an image import, may run.</summary>
+    public TimeSpan JobTimeout { get; set; } = TimeSpan.FromHours(3);
 }

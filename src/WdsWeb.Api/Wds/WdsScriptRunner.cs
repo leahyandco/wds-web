@@ -16,23 +16,25 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
     /// Retry once on a new session if the pooled one had died (idle timeout, server reboot). Only
     /// safe for scripts that don't change anything.
     /// </param>
+    /// <param name="timeout">How long to allow; defaults to <see cref="WdsOptions.CommandTimeout"/>.</param>
     public async Task<JsonElement> RunAsync(
         string scriptName,
         IReadOnlyDictionary<string, object?>? parameters = null,
         bool retryOnBrokenSession = true,
+        TimeSpan? timeout = null,
         CancellationToken ct = default)
     {
         var script = WdsScripts.Get(scriptName);
-        var commandTimeout = options.Value.CommandTimeout;
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(commandTimeout);
+        var limit = timeout ?? options.Value.CommandTimeout;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(limit);
 
         for (var attempt = 1; ; attempt++)
         {
-            using var lease = await pool.AcquireAsync(timeout.Token);
+            using var lease = await pool.AcquireAsync(deadline.Token);
             try
             {
-                return await InvokeAsync(lease.Runspace, scriptName, script, parameters, timeout.Token);
+                return await InvokeAsync(lease.Runspace, scriptName, script, parameters, deadline.Token);
             }
             catch (Exception ex) when (IsBrokenSession(ex))
             {
@@ -46,9 +48,45 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
                 // A stopped command can leave the session in an odd state, so don't hand it out again.
                 lease.Discard();
                 if (!ct.IsCancellationRequested)
-                    throw new TimeoutException($"{scriptName} didn't finish within {commandTimeout}.");
+                    throw new TimeoutException($"{scriptName} didn't finish within {limit}.");
                 throw;
             }
+        }
+    }
+
+    /// <summary>
+    /// Runs a long script, such as an import, on a session of its own, reporting its information,
+    /// warning and progress records as they arrive. Never retried, since a job may already have
+    /// changed the server when its session breaks.
+    /// </summary>
+    public async Task<JsonElement> RunJobAsync(
+        string scriptName,
+        IReadOnlyDictionary<string, object?> parameters,
+        Action<string> onMessage,
+        Action<ProgressRecord> onProgress,
+        CancellationToken ct)
+    {
+        var limit = options.Value.JobTimeout;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(limit);
+
+        using var runspace = await pool.OpenDedicatedAsync(deadline.Token);
+        try
+        {
+            return await InvokeAsync(runspace, scriptName, WdsScripts.Get(scriptName), parameters, deadline.Token, ps =>
+            {
+                ps.Streams.Information.DataAdded += (_, e) => onMessage(ps.Streams.Information[e.Index].MessageData?.ToString() ?? "");
+                ps.Streams.Warning.DataAdded += (_, e) => onMessage("Warning: " + ps.Streams.Warning[e.Index].Message);
+                ps.Streams.Progress.DataAdded += (_, e) => onProgress(ps.Streams.Progress[e.Index]);
+            });
+        }
+        catch (Exception ex) when (IsBrokenSession(ex))
+        {
+            throw new WdsConnectionException($"Lost the PowerShell session on {pool.TargetName} during {scriptName}: {ex.Message}", ex);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"{scriptName} didn't finish within {limit}.");
         }
     }
 
@@ -57,7 +95,8 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
         string scriptName,
         string script,
         IReadOnlyDictionary<string, object?>? parameters,
-        CancellationToken ct)
+        CancellationToken ct,
+        Action<PowerShell>? attach = null)
     {
         using var ps = PowerShell.Create();
         ps.Runspace = runspace;
@@ -66,6 +105,7 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
         {
             foreach (var (name, value) in parameters) ps.AddParameter(name, value);
         }
+        attach?.Invoke(ps);
 
         PSDataCollection<PSObject> output;
         using (ct.Register(() => ps.BeginStop(null, null)))

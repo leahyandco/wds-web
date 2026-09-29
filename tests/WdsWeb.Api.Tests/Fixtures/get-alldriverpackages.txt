@@ -1,0 +1,70 @@
+
+Windows Deployment Services Management Utility [Version 10.0.26100.1150]
+© Microsoft Corporation. All rights reserved.
+
+
+-----------------------------------
+Driver Package Information
+-----------------------------------
+Id: {3D89217B-5327-45F4-97A1-007882C562E9}
+Name: synpd [x64]
+Date added: Sunday, May 10, 2026 12:11:40 AM
+Enabled: Yes
+
+Package INF file path: \\WDS01\REMINST\Stores\Drivers\synpd.inf_x64_{3D89217B-5327-45F4-97A1-007882C562E9}\synpd.inf
+Architecture: x64
+Class name: Mouse
+Class GUID: {4D36E96F-E325-11CE-BFC1-08002BE10318}
+Provider name: Synaptics
+Locale name: 
+Signed: Yes
+Version: 15.2.7.0
+Date: Tuesday, February 8, 2011 12:00:00 AM
+-----------------------------------
+
+
+-----------------------------------
+Driver Package Information
+-----------------------------------
+Id: {2C394064-2010-4D35-A09A-01ED3BB90837}
+Name: SynRMIHID [x64]
+Date added: Sunday, May 10, 2026 12:01:51 AM
+Enabled: Yes
+
+Package INF file path: \\WDS01\REMINST\Stores\Drivers\SynRMIHID.inf_x64_{2C394064-2010-4D35-A09A-01ED3BB90837}\SynRMIHID.inf
+Architecture: x64
+Class name: HIDClass
+Class GUID: {745A17A0-74D3-11D0-B6FE-00A0C90F57DA}
+Provider name: Synaptics
+Locale name: 
+Signed: Yes
+Version: 19.5.35.82
+Date: Friday, July 15, 2022 12:00:00 AM
+-----------------------------------
+
+
+-----------------------------------
+Driver Package Information
+-----------------------------------
+Id: {6945C22D-BFF8-47E2-B0B9-02091B8C5F87}
+Name: ApHidFiltr [x86]
+Date added: Saturday, May 9, 2026 10:59:32 PM
+Enabled: Yes
+
+Package INF file path: \\WDS01\REMINST\Stores\Drivers\ApHidFiltr.inf_x86_{6945C22D-BFF8-47E2-B0B9-02091B8C5F87}\ApHidFiltr.inf
+Architecture: x86
+Class name: HIDClass
+Class GUID: {745A17A0-74D3-11D0-B6FE-00A0C90F57DA}
+Provider name: Alps
+Locale name: 
+Signed: Yes
+Version: 8.2206.1717.162
+Date: Tuesday, November 7, 2017 12:00:00 AM
+-----------------------------------
+
+
+===============================================================================
+Total number of driver packages: 697
+--------
+
+The command completed successfully.

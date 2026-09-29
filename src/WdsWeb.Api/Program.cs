@@ -10,6 +10,10 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.Configure<WdsOptions>(builder.Configuration.GetSection(WdsOptions.SectionName));
 builder.Services.AddSingleton<WdsSessionPool>();
 builder.Services.AddSingleton<WdsScriptRunner>();
+builder.Services.AddSingleton<StagingArea>();
+builder.Services.AddSingleton<UploadStore>();
+builder.Services.AddSingleton<ImportQueue>();
+builder.Services.AddHostedService(services => services.GetRequiredService<ImportQueue>());
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<WdsExceptionHandler>();
 
@@ -24,6 +28,7 @@ app.UseDefaultFiles();
 app.UseStaticFiles(staticFiles);
 
 app.MapWdsEndpoints();
+app.MapImageEndpoints();
 app.MapFallbackToFile("index.html", staticFiles);
 
 app.Run();

@@ -11,6 +11,9 @@ internal sealed class WdsExceptionHandler(IProblemDetailsService problemDetails,
     {
         (int Status, string Title)? mapped = exception switch
         {
+            InvalidRequestException => (StatusCodes.Status400BadRequest, "Can't do that"),
+            KeyNotFoundException => (StatusCodes.Status404NotFound, "Not found"),
+            UploadOffsetException => (StatusCodes.Status409Conflict, "Upload is at a different offset"),
             WdsScriptException => (StatusCodes.Status502BadGateway, "WDS command failed"),
             WdsConnectionException => (StatusCodes.Status503ServiceUnavailable, "Can't reach the WDS server"),
             TimeoutException => (StatusCodes.Status504GatewayTimeout, "WDS command timed out"),
@@ -20,11 +23,14 @@ internal sealed class WdsExceptionHandler(IProblemDetailsService problemDetails,
 
         logger.LogWarning("{Title}: {Message}", problem.Title, exception.Message);
         context.Response.StatusCode = problem.Status;
-        return await problemDetails.TryWriteAsync(new ProblemDetailsContext
+        var details = new ProblemDetailsContext
         {
             HttpContext = context,
             Exception = exception,
             ProblemDetails = { Status = problem.Status, Title = problem.Title, Detail = exception.Message },
-        });
+        };
+        // Tells an uploader where to resume.
+        if (exception is UploadOffsetException offset) details.ProblemDetails.Extensions["received"] = offset.Received;
+        return await problemDetails.TryWriteAsync(details);
     }
 }

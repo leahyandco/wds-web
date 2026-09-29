@@ -10,3 +10,6 @@ public sealed class WdsScriptException(string scriptName, string message, Except
 /// <summary>There's no usable PowerShell session on the WDS server: unreachable, refused, or not configured.</summary>
 public sealed class WdsConnectionException(string message, Exception? innerException = null)
     : Exception(message, innerException);
+
+/// <summary>The request can't be carried out as asked; the message says why, for the person who asked.</summary>
+public sealed class InvalidRequestException(string message) : Exception(message);

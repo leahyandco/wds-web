@@ -39,8 +39,11 @@ public static class WdsEndpoints
         api.MapGet("/devices", (WdsScriptRunner wds, CancellationToken ct) =>
             wds.RunAsync("Get-Devices", ct: ct));
 
-        api.MapGet("/drivers", (WdsScriptRunner wds, CancellationToken ct) =>
-            wds.RunAsync("Get-DriverPackages", ct: ct));
+        api.MapGet("/drivers", async (WdsScriptRunner wds, CancellationToken ct) =>
+        {
+            var reports = await wds.RunAsync("Get-DriverPackages", ct: ct);
+            return WdsUtilDriverParser.Parse(reports.GetProperty("packages").GetString() ?? "", reports.GetProperty("groups").GetString() ?? "");
+        });
 
         api.MapGet("/events", (int? hours, int? max, bool? routine, WdsScriptRunner wds, CancellationToken ct) =>
             wds.RunAsync("Get-Events", new Dictionary<string, object?>

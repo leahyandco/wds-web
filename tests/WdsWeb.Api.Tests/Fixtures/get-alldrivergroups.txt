@@ -1,0 +1,65 @@
+
+Windows Deployment Services Management Utility [Version 10.0.26100.1150]
+© Microsoft Corporation. All rights reserved.
+
+
+-----------------------------------------
+Driver Group: DriverGroup1
+-----------------------------------------
+Name: DriverGroup1
+ID: {491BD23A-1982-4175-A6AF-191106A11C23}
+Applicability: Matched
+Enabled: Yes
+-----------------------------------------
+
+Driver Packages:
+-----------------------------------------
+
+===============================================================================
+Total number of driver packages: 0
+--------
+
+
+-----------------------------------------
+Driver Group: RealtekLAN-Win11
+-----------------------------------------
+Name: RealtekLAN-Win11
+ID: {9F5B530D-06B9-47BC-BE0D-B90E8F904141}
+Applicability: Matched
+Enabled: Yes
+-----------------------------------------
+
+Driver Packages:
+-----------------------------------------
+
+-----------------------------------
+Driver Package Information
+-----------------------------------
+Id: {63327BED-75E5-4D3B-8263-E02844920CBE}
+Name: ws640x64 [x64]
+Date added: Saturday, May 9, 2026 7:24:52 PM
+Enabled: Yes
+
+Package INF file path: \\WDS01\REMINST\Stores\Drivers\ws640x64.inf_x64_{63327BED-75E5-4D3B-8263-E02844920CBE}\ws640x64.inf
+Architecture: x64
+Class name: Net
+Class GUID: {4D36E972-E325-11CE-BFC1-08002BE10318}
+Provider name: Realtek
+Locale name: 
+Signed: Yes
+Version: 10.79.50.1003
+Date: Friday, October 3, 2025 12:00:00 AM
+-----------------------------------
+
+
+===============================================================================
+Total number of driver packages: 1
+--------
+
+
+
+===============================================================================
+Total number of driver groups: 4
+--------
+
+The command completed successfully.

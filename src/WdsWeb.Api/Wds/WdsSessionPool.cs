@@ -38,6 +38,19 @@ public sealed class WdsSessionPool : IDisposable
 
     public string TargetName => _options.Mode == WdsConnectionMode.Remote ? _options.ComputerName! : Environment.MachineName;
 
+    /// <summary>The credential for the WDS server in Remote mode; null means the service's own identity.</summary>
+    internal PSCredential? Credential => _options.Mode == WdsConnectionMode.Remote ? _credential.Value : null;
+
+    /// <summary>
+    /// A session of its own, outside the pool, for a long job such as an image import, so that the
+    /// job doesn't hold one of the pooled sessions for many minutes. The caller disposes it.
+    /// </summary>
+    public Task<Runspace> OpenDedicatedAsync(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return OpenAsync(ct);
+    }
+
     public async Task<Lease> AcquireAsync(CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

@@ -31,6 +31,10 @@ public class WdsScriptsTests
     [InlineData("Get-DriverPackages")]
     [InlineData("Get-Events")]
     [InlineData("Get-BootActivity")]
+    [InlineData("Find-ImageFiles")]
+    [InlineData("Get-ImageFileInfo")]
+    [InlineData("Import-WdsImage")]
+    [InlineData("Invoke-WdsImageAction")]
     public void The_scripts_the_endpoints_use_are_embedded(string name)
     {
         Assert.NotEmpty(WdsScripts.Get(name));
