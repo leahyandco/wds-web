@@ -1,11 +1,26 @@
 import { Card } from '@mantine/core'
 import { useBootImages } from '../api/queries'
+import { EnabledBadge, NameCell, VersionCell } from '../components/Cells'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
-import { RecordTable } from '../components/RecordTable'
-import { autoColumns, pick } from '../lib/records'
+import { RecordTable, type RecordColumn } from '../components/RecordTable'
+import { formatBytes, formatDateTime } from '../lib/format'
+import { asNumber, asString, pick } from '../lib/records'
 
-const preferredColumns = ['Name', 'ImageName', 'Architecture', 'Version', 'Description', 'Enabled', 'FileName', 'Size']
+const columns: RecordColumn[] = [
+  { key: 'Name', label: 'Name', render: (row) => <NameCell name={row.Name} description={row.Description} /> },
+  { key: 'Version', label: 'Windows', render: (row) => <VersionCell version={row.Version} /> },
+  { key: 'Architecture', label: 'Arch', nowrap: true },
+  { key: 'FileName', label: 'File' },
+  { key: 'Size', label: 'Size', nowrap: true, render: (row) => formatBytes(asNumber(row.Size)) },
+  { key: 'Enabled', label: 'Status', render: (row) => <EnabledBadge enabled={row.Enabled} /> },
+  {
+    key: 'LastModificationTime',
+    label: 'Modified',
+    nowrap: true,
+    render: (row) => formatDateTime(asString(row.LastModificationTime)),
+  },
+]
 
 export function BootImagesPage() {
   const query = useBootImages()
@@ -23,9 +38,9 @@ export function BootImagesPage() {
           {(rows) => (
             <RecordTable
               rows={rows}
-              columns={autoColumns(rows, preferredColumns)}
+              columns={columns}
               empty="No boot images are registered."
-              detailTitle={(row) => String(pick(row, 'Name', 'ImageName') ?? 'Boot image')}
+              detailTitle={(row) => String(pick(row, 'Name') ?? 'Boot image')}
             />
           )}
         </QueryState>

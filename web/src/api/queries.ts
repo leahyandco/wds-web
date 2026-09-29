@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
 import type {
+  ActivityResponse,
   ConnectionInfo,
   Devices,
   EventsResponse,
@@ -42,15 +43,29 @@ export const useInstallImages = () =>
     queryFn: ({ signal }) => apiGet<InstallImages>('/install-images', signal),
   })
 
+export const useDrivers = () =>
+  useQuery({
+    queryKey: ['drivers'],
+    queryFn: ({ signal }) => apiGet<WdsRecord[]>('/drivers', signal),
+  })
+
 export const useDevices = () =>
   useQuery({
     queryKey: ['devices'],
     queryFn: ({ signal }) => apiGet<Devices>('/devices', signal),
   })
 
-export const useEvents = (hours: number) =>
+export const useEvents = (hours: number, includeRoutine = false) =>
   useQuery({
-    queryKey: ['events', hours],
-    queryFn: ({ signal }) => apiGet<EventsResponse>(`/events?hours=${hours}`, signal),
+    queryKey: ['events', hours, includeRoutine],
+    queryFn: ({ signal }) => apiGet<EventsResponse>(`/events?hours=${hours}&routine=${includeRoutine}`, signal),
     refetchInterval: 30_000,
+  })
+
+/** PXE boots, refreshed often enough to watch a client come up. */
+export const useActivity = (hours: number) =>
+  useQuery({
+    queryKey: ['activity', hours],
+    queryFn: ({ signal }) => apiGet<ActivityResponse>(`/activity?hours=${hours}`, signal),
+    refetchInterval: 10_000,
   })

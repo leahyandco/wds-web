@@ -22,4 +22,9 @@
     <ProjectReference Include="..\..\src\WdsWeb.Api\WdsWeb.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Output captured from a real WDS server. -->
+    <None Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

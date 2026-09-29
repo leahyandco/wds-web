@@ -47,7 +47,8 @@ public static partial class WdsUtilOutputParser
 
     private static bool IsNoise(string content) =>
         content.StartsWith("Windows Deployment Services Management Utility", StringComparison.Ordinal) ||
-        content.StartsWith("Copyright", StringComparison.Ordinal) ||
+        // "Copyright (C) Microsoft Corporation..." or "© Microsoft Corporation...", depending on the build.
+        content.Contains("Microsoft Corporation", StringComparison.Ordinal) ||
         content.StartsWith("The command completed", StringComparison.Ordinal) ||
         (content.StartsWith('[') && content.EndsWith(']') && content.Contains("---", StringComparison.Ordinal));
 

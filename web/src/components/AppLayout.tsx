@@ -12,10 +12,12 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
-  IconActivity,
+  IconCpu,
   IconDevices,
   IconDisc,
+  IconHistory,
   IconLayoutDashboard,
+  IconListDetails,
   IconMoon,
   IconRocket,
   IconSettings,
@@ -26,11 +28,13 @@ import { useConnection, useTarget } from '../api/queries'
 
 const links = [
   { to: '/', label: 'Dashboard', icon: IconLayoutDashboard },
+  { to: '/activity', label: 'Boot activity', icon: IconHistory },
   { to: '/boot-images', label: 'Boot images', icon: IconRocket },
   { to: '/install-images', label: 'Install images', icon: IconDisc },
+  { to: '/drivers', label: 'Drivers', icon: IconCpu },
   { to: '/devices', label: 'Devices', icon: IconDevices },
   { to: '/server', label: 'Server settings', icon: IconSettings },
-  { to: '/events', label: 'Events', icon: IconActivity },
+  { to: '/events', label: 'Events', icon: IconListDetails },
 ]
 
 export function AppLayout() {

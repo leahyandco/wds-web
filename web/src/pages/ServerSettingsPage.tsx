@@ -29,6 +29,9 @@ function Settings({ config }: { config: ServerConfig }) {
   const answerClients = findValue(config.sections, ['Answer Policy', 'Answer clients'])
   const knownOnly = findValue(config.sections, ['Answer Policy', 'Answer only known clients'])
   const policies = config.sections.flatMap((section) => section.children)
+  const usedPercent = config.remoteInstall
+    ? 100 - (config.remoteInstall.freeBytes / config.remoteInstall.totalBytes) * 100
+    : 0
 
   return (
     <Stack gap="lg">
@@ -59,7 +62,8 @@ function Settings({ config }: { config: ServerConfig }) {
               </Text>
               <Progress
                 mt="sm"
-                value={100 - (config.remoteInstall.freeBytes / config.remoteInstall.totalBytes) * 100}
+                value={usedPercent}
+                color={usedPercent > 90 ? 'red' : usedPercent > 75 ? 'yellow' : 'blue'}
                 aria-label="Volume used"
               />
               <Text size="xs" c="dimmed" mt={4}>

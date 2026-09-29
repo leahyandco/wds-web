@@ -1,0 +1,224 @@
+
+Windows Deployment Services Management Utility [Version 10.0.26100.1150]
+© Microsoft Corporation. All rights reserved.
+
+
+SETUP INFORMATION FOR SERVER 
+[-----------------------------------------------------------------------------]
+
+
+Server State:
+     OS version: 10.0
+     WDS operational mode: Native
+     Standalone configuration: Yes
+
+Installation State:
+     RemoteInstall location: C:\RemoteInstall
+     RemoteInstall share up-to-date: Yes
+     Boot files installed:
+         x86     - Yes
+         x64     - Yes
+         arm64   - Yes
+         arm     - Yes
+         x86uefi - Yes
+         x64uefi  - Yes
+
+
+[-----------------------------------------------------------------------------]
+
+
+CONFIGURATION INFORMATION FOR SERVER 
+[-----------------------------------------------------------------------------]
+
+
+Server Authorization:
+     Authorization state: <Unavailable in standalone configuration>
+
+Answer Policy:
+     Answer clients: Yes
+     Answer only known clients: No
+     Response delay: 0 seconds
+
+Directory Use Policy:
+     Prestage devices using MAC: No
+     New computer naming policy: %61Username%#
+     New computers join domain: No
+
+New Computer OU:
+     OU type: Custom
+     OU: 
+
+DHCP Configuration:
+     DHCP service status: Not Installed
+     DHCP option 60 configured: <Not Applicable>
+
+PXE Bind Policy:
+     Use DHCP ports: Yes
+     Rogue detection: Disabled
+     RPC port: 5040
+
+Interface Bind Policy:
+     Policy: Exclude Registered
+     Registered interfaces:
+
+Boot Program Policy:
+     Known client PXE prompt policy: OptIn
+     New client PXE prompt policy: OptIn
+     Allow N12 for new clients: <Not Applicable>
+     Reset boot program: Disabled
+     Default boot programs:
+         x86     - boot\x86\pxeboot.com
+         x64     - boot\x64\pxeboot.com
+         arm64   - boot\arm64\bootmgfw.efi
+         arm     - boot\arm\bootmgfw.efi
+         x86uefi - Boot\x86\bootmgfw.efi
+         x64uefi  - Boot\x64\bootmgfw.efi
+     Default N12 boot programs:
+         x86     - boot\x86\pxeboot.n12
+         x64     - boot\x64\pxeboot.n12
+         arm64   - boot\arm64\bootmgfw.efi
+         arm     - boot\arm\bootmgfw.efi
+         x86uefi - Boot\x86\bootmgfw.efi
+         x64uefi  - Boot\x64\bootmgfw.efi
+
+Banned GUIDs list:
+
+Boot Image Policy:
+     Default image type for x64 clients: Both
+     Default boot images:
+         x86     - 
+         x64     - 
+         arm64   - 
+         arm     - 
+         x86uefi - 
+         x64uefi  - 
+
+Driver Policy:
+     Avoid duplicate driver packages: Yes
+
+WDS Client Policy:
+     Logging policy:
+         Enabled: No
+         Logging level: Info
+
+     Unattend policy:
+         Enabled: No
+         Command-line precedence: No
+         WDS unattend files:
+             x86     - 
+             x64     - 
+             arm64   - 
+             arm     - 
+             x86uefi - 
+             x64uefi  - 
+
+Server Automatic Refresh Policy:
+     Refresh period: 900 seconds
+
+BCD Refresh Policy:
+     Enabled: No
+     Refresh period: 60 minutes
+
+Pending Device Policy:
+     Policy: Disabled
+     Poll interval: 10 seconds
+     Max retry count: 2160 times
+     Message to pending clients: 
+     Retention period:
+         Approved devices: 30 days
+         Other devices: 1 days
+     Defaults for x86:
+         Referral server: 
+         Boot program path: 
+         WDS client unattend file path: 
+         Boot image path: 
+         User: Domain Admins
+         Join rights: Full
+         Join domain: Yes
+     Defaults for x64:
+         Referral server: 
+         Boot program path: 
+         WDS client unattend file path: 
+         Boot image path: 
+         User: Domain Admins
+         Join rights: Full
+         Join domain: Yes
+     Defaults for arm64:
+         Referral server: 
+         Boot program path: 
+         WDS client unattend file path: 
+         Boot image path: 
+         User: Domain Admins
+         Join rights: Full
+         Join domain: Yes
+     Defaults for arm:
+         Referral server: 
+         Boot program path: 
+         WDS client unattend file path: 
+         Boot image path: 
+         User: Domain Admins
+         Join rights: Full
+         Join domain: Yes
+     Defaults for x86uefi:
+         Referral server: 
+         Boot program path: 
+         WDS client unattend file path: 
+         Boot image path: 
+         User: Domain Admins
+         Join rights: Join Only
+         Join domain: Yes
+     Defaults for x64uefi:
+         Referral server: 
+         Boot program path: 
+         WDS client unattend file path: 
+         Boot image path: 
+         User: Domain Admins
+         Join rights: Join Only
+         Join domain: Yes
+
+WDS PXE Providers:
+     Name: WDSDCPXE
+     Path: C:\WINDOWS\system32\wdsdcpxe.dll
+     Order: 1
+     Critical: No
+
+WDS Device Controllers:
+     Name: WDSADDC
+     CLSID: {1F05CFEA-D4E4-4049-9C76-7B4F0013ECC9}
+     Priority: 32768
+     Enabled: No
+
+     Name: WDSSDC
+     CLSID: {17FD4B68-06B7-48EB-97B7-1575A171AED9}
+     Priority: 32768
+     Enabled: Yes
+
+WDS Transport Server Policy:
+     IPv4 source: Range
+         Start address: 239.192.0.2
+         End address: 239.192.0.254
+     IPv6 source: Range
+         Start address: FF15::1:1
+         End address: FF15::1:FF
+     UDP Port Policy: Dynamic
+         Start port: <Not Applicable>
+         End port: <Not Applicable>
+     Network profile: <Not Applicable>
+     TFTP Properties: 
+         Maximum block size: 0
+         Variable window extension enabled: Yes
+     Multicast session policy: 
+         Slow client handling policy: None
+         AutoDisconnect threshold: 256 KBps
+         Multistream stream count: 2
+         Slow client fallback: Yes
+     Multicast Content Providers:
+         Name: WDS
+         Description: Default Content Provider
+         File path: C:\WINDOWS\system32\wdscp.dll
+         Initialization routine: WdsTransportProviderInit
+
+
+[-----------------------------------------------------------------------------]
+
+The command completed successfully.

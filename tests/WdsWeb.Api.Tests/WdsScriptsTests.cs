@@ -5,17 +5,35 @@ namespace WdsWeb.Api.Tests;
 
 public class WdsScriptsTests
 {
-    public static TheoryData<string> ScriptNames =>
-        ["Init", "Get-TargetInfo", "Get-ServerConfig", "Get-BootImages", "Get-InstallImages", "Get-Devices", "Get-Events"];
+    private const string ResourcePrefix = "WdsWeb.Scripts.";
+
+    public static TheoryData<string> EmbeddedScripts => new(
+        typeof(WdsScripts).Assembly.GetManifestResourceNames()
+            .Where(n => n.StartsWith(ResourcePrefix, StringComparison.Ordinal) && n.EndsWith(".ps1", StringComparison.Ordinal))
+            .Select(n => n[ResourcePrefix.Length..^".ps1".Length]));
 
     [Theory]
-    [MemberData(nameof(ScriptNames))]
-    public void Every_script_is_embedded_and_parses(string name)
+    [MemberData(nameof(EmbeddedScripts))]
+    public void Every_embedded_script_parses(string name)
     {
-        var script = WdsScripts.Get(name);
+        Parser.ParseInput(WdsScripts.Get(name), out _, out var errors);
 
-        Parser.ParseInput(script, out _, out var errors);
         Assert.Empty(errors);
+    }
+
+    [Theory]
+    [InlineData("Init")]
+    [InlineData("Get-TargetInfo")]
+    [InlineData("Get-ServerConfig")]
+    [InlineData("Get-BootImages")]
+    [InlineData("Get-InstallImages")]
+    [InlineData("Get-Devices")]
+    [InlineData("Get-DriverPackages")]
+    [InlineData("Get-Events")]
+    [InlineData("Get-BootActivity")]
+    public void The_scripts_the_endpoints_use_are_embedded(string name)
+    {
+        Assert.NotEmpty(WdsScripts.Get(name));
     }
 
     [Fact]

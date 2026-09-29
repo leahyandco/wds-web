@@ -5,6 +5,8 @@ namespace WdsWeb.Api.Endpoints;
 
 public static class WdsEndpoints
 {
+    private const int MaxHours = 24 * 31;
+
     public static void MapWdsEndpoints(this IEndpointRouteBuilder app)
     {
         var api = app.MapGroup("/api");
@@ -37,12 +39,34 @@ public static class WdsEndpoints
         api.MapGet("/devices", (WdsScriptRunner wds, CancellationToken ct) =>
             wds.RunAsync("Get-Devices", ct: ct));
 
-        api.MapGet("/events", (int? hours, int? max, WdsScriptRunner wds, CancellationToken ct) =>
+        api.MapGet("/drivers", (WdsScriptRunner wds, CancellationToken ct) =>
+            wds.RunAsync("Get-DriverPackages", ct: ct));
+
+        api.MapGet("/events", (int? hours, int? max, bool? routine, WdsScriptRunner wds, CancellationToken ct) =>
             wds.RunAsync("Get-Events", new Dictionary<string, object?>
             {
-                ["Hours"] = Math.Clamp(hours ?? 72, 1, 24 * 31),
+                ["Hours"] = Math.Clamp(hours ?? 72, 1, MaxHours),
                 ["MaxEvents"] = Math.Clamp(max ?? 300, 1, 5000),
+                ["IncludeRoutine"] = routine ?? false,
             }, ct: ct));
+
+        api.MapGet("/activity", async (int? hours, WdsScriptRunner wds, CancellationToken ct) =>
+        {
+            var result = await wds.RunAsync("Get-BootActivity", new Dictionary<string, object?>
+            {
+                ["Hours"] = Math.Clamp(hours ?? 72, 1, MaxHours),
+            }, ct: ct);
+
+            var events = result.GetProperty("events").EnumerateArray().Select(e => new WdsEventRecord(
+                e.GetProperty("time").GetDateTimeOffset(),
+                e.GetProperty("id").GetInt32(),
+                e.GetProperty("data").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString() ?? "")));
+
+            return new ActivityResponse(
+                BootActivity.Build(events, DateTimeOffset.UtcNow),
+                result.GetProperty("logStartsAt").ValueKind == JsonValueKind.String ? result.GetProperty("logStartsAt").GetDateTimeOffset() : null,
+                result.GetProperty("logMaxBytes").GetInt64());
+        });
 
         // Keep unknown API paths from falling through to the SPA's index.html.
         api.Map("/{**rest}", () => Results.NotFound());
@@ -57,3 +81,6 @@ public sealed record ServerConfigResponse(
     string Raw,
     JsonElement RemoteInstall,
     JsonElement AllowHandsFreeFunctionality);
+
+/// <param name="LogStartsAt">The oldest event in the Operational log: boots before this can't be shown.</param>
+public sealed record ActivityResponse(IReadOnlyList<BootSession> Sessions, DateTimeOffset? LogStartsAt, long LogMaxBytes);

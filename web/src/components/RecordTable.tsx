@@ -8,6 +8,8 @@ export interface RecordColumn {
   key: string
   label: string
   render?: (row: WdsRecord) => ReactNode
+  /** Keep the cell on one line, for short values such as dates and sizes. */
+  nowrap?: boolean
 }
 
 interface RecordTableProps {
@@ -53,7 +55,9 @@ export function RecordTable({ rows, columns, empty, detailTitle }: RecordTablePr
                 onKeyDown={(event) => event.key === 'Enter' && setSelected(row)}
               >
                 {columns.map((column) => (
-                  <Table.Td key={column.key}>{column.render ? column.render(row) : formatValue(row[column.key])}</Table.Td>
+                  <Table.Td key={column.key} style={column.nowrap ? { whiteSpace: 'nowrap' } : undefined}>
+                    {column.render ? column.render(row) : formatValue(row[column.key])}
+                  </Table.Td>
                 ))}
               </Table.Tr>
             ))}

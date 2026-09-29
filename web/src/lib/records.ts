@@ -1,6 +1,9 @@
 import type { RecordColumn } from '../components/RecordTable'
 import type { WdsRecord } from '../api/types'
 
+export const asString = (value: unknown) => (typeof value === 'string' ? value : null)
+export const asNumber = (value: unknown) => (typeof value === 'number' ? value : null)
+
 /** The first of several property names that has a value. */
 export function pick(record: WdsRecord, ...names: string[]): unknown {
   for (const name of names) {

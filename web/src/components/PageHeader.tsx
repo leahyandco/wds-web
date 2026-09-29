@@ -20,7 +20,13 @@ export function PageHeader({ title, description, onRefresh, refreshing }: PageHe
         )}
       </div>
       {onRefresh && (
-        <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={onRefresh} loading={refreshing}>
+        <Button
+          variant="default"
+          leftSection={<IconRefresh size={16} />}
+          onClick={onRefresh}
+          loading={refreshing}
+          style={{ flexShrink: 0 }}
+        >
           Refresh
         </Button>
       )}

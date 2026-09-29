@@ -1,4 +1,5 @@
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const dateOnly = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' })
 const isoDate = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
 
 export const EMPTY = '—'
@@ -7,6 +8,13 @@ export function formatDateTime(value: string | null | undefined): string {
   if (!value) return EMPTY
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : dateTime.format(date)
+}
+
+/** A date without its time, e.g. a driver's release date, which carries no meaningful time of day. */
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return EMPTY
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : dateOnly.format(date)
 }
 
 export function formatBytes(bytes: number | null | undefined): string {
@@ -22,6 +30,28 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 export const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
+
+const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+
+/** "5 minutes ago", "yesterday", and so on. */
+export function formatAgo(value: string | null | undefined, now = Date.now()): string {
+  if (!value) return EMPTY
+  const seconds = (new Date(value).getTime() - now) / 1000
+  if (Number.isNaN(seconds)) return value
+  const steps: [Intl.RelativeTimeFormatUnit, number][] = [
+    ['second', 60],
+    ['minute', 60],
+    ['hour', 24],
+    ['day', 30],
+    ['month', 12],
+  ]
+  let amount = seconds
+  for (const [unit, size] of steps) {
+    if (Math.abs(amount) < size) return relative.format(Math.round(amount), unit)
+    amount /= size
+  }
+  return relative.format(Math.round(amount), 'year')
+}
 
 /** Renders any JSON value from a WDS record as a short string. */
 export function formatValue(value: unknown): string {

@@ -57,9 +57,48 @@ export interface WdsEvent {
   provider: string
   recordId: number
   message: string | null
+  /** The event's named fields (UserData elements, or EventData values keyed by name or position). */
+  data: Record<string, string>
 }
 
 export interface EventsResponse {
   events: WdsEvent[]
+  /** Routine TFTP and management-call events left out of `events`. */
+  routineHidden: number
   warnings: string[]
+}
+
+export type BootStatus = 'pxeOnly' | 'bootMenu' | 'downloading' | 'loaded' | 'failed' | 'incomplete'
+
+export interface TftpTransfer {
+  fileName: string
+  fileSize: number | null
+  startedAt: string | null
+  finishedAt: string | null
+  succeeded: boolean | null
+  errorCode: string | null
+}
+
+/** One client's PXE boot and the files it then fetched over TFTP. */
+export interface BootSession {
+  clientIp: string
+  macAddress: string | null
+  deviceId: string | null
+  /** WDS's own name for the client's architecture (e.g. x64uefi), when it served the client a BCD. */
+  architecture: string | null
+  /** The architecture number from the PXE event, whose meaning WDS doesn't document. */
+  architectureCode: number | null
+  prestaged: boolean | null
+  firstSeen: string
+  lastSeen: string
+  status: BootStatus
+  bootImage: string | null
+  transfers: TftpTransfer[]
+}
+
+export interface ActivityResponse {
+  sessions: BootSession[]
+  /** The oldest event in WDS's Operational log; boots before this aren't known. */
+  logStartsAt: string | null
+  logMaxBytes: number
 }

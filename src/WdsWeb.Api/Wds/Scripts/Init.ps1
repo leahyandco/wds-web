@@ -50,12 +50,15 @@ function global:ConvertTo-WdsObject {
         foreach ($property in $base.CimInstanceProperties) {
             $map[$property.Name] = ConvertTo-WdsValue $property.Value ($Depth - 1)
         }
-        # Friendlier members the module's type data adds on top of the raw CIM properties.
+        # The module's type data redefines enum properties under the same names with readable values
+        # (Architecture 3 becomes X64, Status 0 becomes Pending) and adds aliases such as ImageName.
+        # Prefer those, but keep the raw value when a script property fails or returns nothing.
         foreach ($property in $InputObject.PSObject.Properties) {
-            if ($property.MemberType -in 'ScriptProperty', 'AliasProperty', 'NoteProperty' -and
-                $property.Name -ne 'PSComputerName' -and -not $map.Contains($property.Name)) {
-                $map[$property.Name] = ConvertTo-WdsValue (Get-WdsPropertyValue $property) ($Depth - 1)
+            if ($property.MemberType -notin 'ScriptProperty', 'AliasProperty', 'NoteProperty' -or $property.Name -eq 'PSComputerName') {
+                continue
             }
+            $value = ConvertTo-WdsValue (Get-WdsPropertyValue $property) ($Depth - 1)
+            if ($null -ne $value -or -not $map.Contains($property.Name)) { $map[$property.Name] = $value }
         }
         return $map
     }
@@ -71,6 +74,33 @@ function global:ConvertTo-WdsObject {
 function global:Get-WdsPropertyValue {
     param($Property)
     try { $Property.Value } catch { $null }
+}
+
+# The named fields of an event: the elements of its UserData block (which WDS's PXE and TFTP events
+# use), or else its EventData values, keyed by name or by position when unnamed.
+function global:Get-WdsEventData {
+    param([Parameter(Mandatory)] $Record)
+
+    $eventXml = ([xml]$Record.ToXml()).Event
+    $data = [ordered]@{}
+    $userData = $eventXml['UserData']
+    if ($userData -and $userData.FirstChild) {
+        foreach ($field in $userData.FirstChild.ChildNodes) {
+            if ($field.NodeType -eq 'Element') { $data[$field.LocalName] = $field.InnerText }
+        }
+        return $data
+    }
+    $eventData = $eventXml['EventData']
+    if ($eventData) {
+        $position = 0
+        foreach ($field in $eventData.ChildNodes) {
+            if ($field.NodeType -ne 'Element') { continue }
+            $name = $field.GetAttribute('Name')
+            $data[$(if ($name) { $name } else { "$position" })] = $field.InnerText
+            $position++
+        }
+    }
+    return $data
 }
 
 function global:ConvertTo-WdsJson {
