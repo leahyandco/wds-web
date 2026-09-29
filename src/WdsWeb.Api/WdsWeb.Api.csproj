@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.6" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- These run on the WDS server. Embedding them keeps a deployed build and its scripts in step. -->
+    <EmbeddedResource Include="Wds\Scripts\*.ps1" LogicalName="WdsWeb.Scripts.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

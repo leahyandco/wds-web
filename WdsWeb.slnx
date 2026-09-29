@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WdsWeb.Api/WdsWeb.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WdsWeb.Api.Tests/WdsWeb.Api.Tests.csproj" />
+  </Folder>
+</Solution>
