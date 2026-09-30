@@ -32,15 +32,21 @@ $repo = Split-Path -Parent $PSScriptRoot
 $publish = Join-Path $repo 'artifacts\publish'
 $package = Join-Path $repo 'artifacts\WdsWeb.zip'
 
+# Judge a build tool by its exit code. Tools like Vite print warnings to stderr, which Windows
+# PowerShell would otherwise turn into a terminating error under $ErrorActionPreference = 'Stop'.
+function Invoke-Tool([string] $What, [scriptblock] $Command) {
+    $ErrorActionPreference = 'Continue'
+    & $Command 2>&1 | ForEach-Object { Write-Host "  $_" }
+    if ($LASTEXITCODE -ne 0) { throw "$What failed (exit code $LASTEXITCODE)." }
+}
+
 if (-not $SkipBuild) {
     Write-Host 'Building the frontend...'
-    npm run build --prefix (Join-Path $repo 'web')
-    if ($LASTEXITCODE -ne 0) { throw 'The frontend build failed.' }
+    Invoke-Tool 'The frontend build' { npm run build --prefix (Join-Path $repo 'web') }
 
     Write-Host 'Publishing a self-contained build...'
     if (Test-Path $publish) { Remove-Item -LiteralPath $publish -Recurse -Force }
-    dotnet publish (Join-Path $repo 'src\WdsWeb.Api') -c Release -r win-x64 --self-contained true -o $publish -p:DebugType=none
-    if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
+    Invoke-Tool 'dotnet publish' { dotnet publish (Join-Path $repo 'src\WdsWeb.Api') -c Release -r win-x64 --self-contained true -o $publish -p:DebugType=none }
 }
 if (-not (Test-Path (Join-Path $publish 'WdsWeb.Api.exe'))) { throw "There's no build in $publish; run without -SkipBuild." }
 if (Test-Path $package) { Remove-Item -LiteralPath $package -Force }
@@ -110,17 +116,22 @@ try {
         }
 
         Start-Service -Name $serviceName
-        # Wait for it to answer over HTTPS. The certificate is self-signed, so don't validate it here.
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-        $health = $null
+        # Wait for it to answer over HTTPS. curl.exe (in Windows since 1803) with -k, because the
+        # certificate is self-signed and doesn't name localhost; a PowerShell certificate callback
+        # can't run on the thread TLS uses in a remote session.
+        $healthy = $false
         $deadline = (Get-Date).AddSeconds(90)
-        while (-not $health -and (Get-Date) -lt $deadline) {
-            try { $health = Invoke-RestMethod -Uri "https://localhost:$port/api/health" -UseBasicParsing -TimeoutSec 5 }
-            catch { Start-Sleep -Seconds 2 }
+        while (-not $healthy -and (Get-Date) -lt $deadline) {
+            $healthy = (curl.exe -sk --max-time 5 "https://localhost:$port/api/health") -match '"ok"'
+            if (-not $healthy) { Start-Sleep -Seconds 2 }
         }
-        if (-not $health) { throw "The service started, but https://localhost:$port/api/health didn't answer. Check the Application event log." }
-        Write-Output "The $serviceName service is $((Get-Service -Name $serviceName).Status.ToString().ToLowerInvariant()) and healthy"
+        if (-not $healthy) { throw "The service started, but https://localhost:$port/api/health didn't answer. Check the Application event log." }
+
+        # And that it can manage WDS: the deep check opens a PowerShell session and asks WDS.
+        $deep = (curl.exe -sk --max-time 120 "https://localhost:$port/api/health?deep=true") | Out-String
+        $check = try { $deep | ConvertFrom-Json } catch { $null }
+        if (-not $check -or $check.status -ne 'ok') { throw "The service is up but can't manage WDS: $deep" }
+        Write-Output "The $serviceName service is $((Get-Service -Name $serviceName).Status.ToString().ToLowerInvariant()) and can manage WDS on $($check.server) (Windows PowerShell $($check.psVersion), WDS module $($check.wdsModule), WDS service $($check.wdsService.status))"
     }
 }
 finally {

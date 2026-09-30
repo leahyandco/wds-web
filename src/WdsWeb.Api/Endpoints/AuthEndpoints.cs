@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -12,7 +13,31 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/health", () => new { status = "ok" }).AllowAnonymous();
+        // ?deep=true also opens a session on the WDS server, so a deployment can check the service
+        // really can manage WDS. That part answers only requests from this machine.
+        app.MapGet("/api/health", async (bool? deep, HttpContext http, WdsScriptRunner wds, CancellationToken ct) =>
+        {
+            if (deep != true) return Results.Ok(new { status = "ok" });
+            // Kestrel listens dual-stack, so 127.0.0.1 can arrive as ::ffff:127.0.0.1.
+            if (http.Connection.RemoteIpAddress is not { } address || !IPAddress.IsLoopback(address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            try
+            {
+                var target = await wds.RunAsync("Get-TargetInfo", ct: ct);
+                return Results.Ok(new
+                {
+                    status = "ok",
+                    server = target.GetProperty("computerName"),
+                    psVersion = target.GetProperty("psVersion"),
+                    wdsService = target.GetProperty("wdsService"),
+                    wdsModule = target.GetProperty("wdsModule"),
+                });
+            }
+            catch (Exception ex) when (ex is WdsConnectionException or WdsScriptException or TimeoutException)
+            {
+                return Results.Json(new { status = "unhealthy", error = ex.Message }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+        }).AllowAnonymous();
 
         var auth = app.MapGroup("/api/auth").AllowAnonymous();
 

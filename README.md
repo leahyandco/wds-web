@@ -85,7 +85,8 @@ the server needs no .NET runtime, and installs it as the **WdsWeb** service on t
 as LocalSystem in Local mode. On the first run it also creates a self-signed HTTPS certificate for
 the server's names and addresses, `C:\ProgramData\WdsWeb\settings.json` (port and certificate
 thumbprint), the "WDS Console" event log source and a firewall rule. Later runs only replace the
-program files and restart the service.
+program files and restart the service. Every run ends by checking that the service answers and can
+manage WDS (`/api/health?deep=true`, which answers only requests from the server itself).
 
 - **Address**: `https://wds01:8443/`. Browsers warn about the self-signed certificate until it's
   trusted; export it from `LocalMachine\My` on the server ("WDS Console") and import it into Trusted

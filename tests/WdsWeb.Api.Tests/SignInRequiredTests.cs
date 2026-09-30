@@ -50,6 +50,15 @@ public sealed class SignInRequiredTests(SignInRequiredTests.ProductionApp app) :
     }
 
     [Fact]
+    public async Task Keeps_the_deep_health_check_to_the_server_itself()
+    {
+        // The test server's requests carry no client address, so they don't count as this machine.
+        var response = await _client.GetAsync("/api/health?deep=true");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Says_nobody_is_signed_in()
     {
         var session = await _client.GetFromJsonAsync<JsonElement>("/api/auth/me");
