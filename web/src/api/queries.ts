@@ -10,6 +10,7 @@ import type {
   EventsResponse,
   ImageFileInfo,
   ImageKind,
+  ImageUnattend,
   ImportJob,
   ImportRequestBody,
   InstallImages,
@@ -164,6 +165,48 @@ export const useImageAction = () => {
       queryClient.invalidateQueries({ queryKey: [input.kind === 'boot' ? 'boot-images' : 'install-images'] }),
   })
 }
+
+/** Which image to change: name plus architecture (boot) or group (install); the file tells apart namesakes. */
+export interface ImageRef {
+  name: string
+  architecture?: string
+  imageGroup?: string | null
+  fileName?: string | null
+}
+
+/** Null leaves a property as it is. */
+export interface ImageChanges {
+  newName?: string | null
+  newDescription?: string | null
+  displayOrder?: number | null
+  unattendXml?: string | null
+  removeUnattend?: boolean
+}
+
+export const useSetImageProperties = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ kind, image, changes }: { kind: ImageKind; image: ImageRef; changes: ImageChanges }) =>
+      apiSend('PUT', `/${kind === 'boot' ? 'boot-images' : 'install-images'}/properties`, { ...image, ...changes }),
+    onSuccess: (_, input) => {
+      void queryClient.invalidateQueries({ queryKey: [input.kind === 'boot' ? 'boot-images' : 'install-images'] })
+      void queryClient.invalidateQueries({ queryKey: ['image-unattend'] })
+    },
+  })
+}
+
+/** An install image's unattend file, read when `image` is given. */
+export const useImageUnattend = (image: ImageRef | null) =>
+  useQuery({
+    queryKey: ['image-unattend', image?.name, image?.imageGroup, image?.fileName],
+    queryFn: ({ signal }) => {
+      const query = new URLSearchParams({ name: image!.name })
+      if (image?.imageGroup) query.set('imageGroup', image.imageGroup)
+      if (image?.fileName) query.set('fileName', image.fileName)
+      return apiGet<ImageUnattend>(`/install-images/unattend?${query}`, signal)
+    },
+    enabled: image !== null,
+  })
 
 export const useApplySettings = () => {
   const queryClient = useQueryClient()

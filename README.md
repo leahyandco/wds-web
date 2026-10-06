@@ -43,6 +43,12 @@ WDS server (the Import button on the image pages).
 Files are offered from `C:\Users\*\Downloads`, `C:\ISO`, `C:\ISOs` and `C:\Images` on the server
 unless `Wds:ImageSearchPaths` says otherwise.
 
+Each image's menu also has **Properties**: its name, description and display order (WDS lists lower
+numbers first), and for an install image the unattend file Windows Setup uses when it installs it,
+kept under RemoteInstall as `Images\<group>\<image>\Unattend\ImageUnattend.xml`. An unattend file
+is checked to be a well-formed Setup answer file before WDS gets it, and the audit log records only
+its size, since unattend files often hold passwords.
+
 ## Devices
 
 Prestaged devices are known clients: WDS answers them even when it answers only known clients, and

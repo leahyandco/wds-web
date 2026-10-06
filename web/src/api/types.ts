@@ -66,6 +66,14 @@ export interface InstallImages {
   images: WdsRecord[]
 }
 
+/** An install image's unattend file, which Windows Setup reads when it installs the image. */
+export interface ImageUnattend {
+  present: boolean
+  /** Where WDS keeps it on the server. */
+  path: string
+  content: string | null
+}
+
 export interface Devices {
   prestaged: WdsRecord[]
   autoAdd: WdsRecord[]
@@ -269,6 +277,14 @@ export interface BootSession {
   status: BootStatus
   bootImage: string | null
   transfers: TftpTransfer[]
+  notes: BootNote[]
+}
+
+/** Something that happened later in a boot, after the boot image loaded. */
+export interface BootNote {
+  time: string
+  /** unattendBlocked: WDS refused Windows Setup's request for the WDS client unattend file. */
+  kind: 'unattendBlocked'
 }
 
 export interface ActivityResponse {

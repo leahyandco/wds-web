@@ -1,16 +1,17 @@
 import { ActionIcon, Button, Group, Menu, Modal, Text } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconDots, IconPlayerPause, IconPlayerPlay, IconTrash } from '@tabler/icons-react'
+import { IconDots, IconPencil, IconPlayerPause, IconPlayerPlay, IconTrash } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useImageAction, type ImageAction } from '../api/queries'
 import type { ImageKind, WdsRecord } from '../api/types'
+import { ImagePropertiesDialog } from './ImagePropertiesDialog'
 
 const pastTense: Record<ImageAction, string> = { enable: 'Enabled', disable: 'Disabled', remove: 'Removed' }
 
-/** Enable, disable or remove one boot or install image, confirming before a removal. */
+/** Change, enable, disable or remove one boot or install image, confirming before a removal. */
 export function ImageActionsMenu({ kind, image }: { kind: ImageKind; image: WdsRecord }) {
   const action = useImageAction()
-  const [confirming, setConfirming] = useState(false)
+  const [dialog, setDialog] = useState<'properties' | 'remove' | null>(null)
   const name = String(image.Name)
 
   const run = async (verb: ImageAction) => {
@@ -32,7 +33,7 @@ export function ImageActionsMenu({ kind, image }: { kind: ImageKind; image: WdsR
   }
 
   return (
-    // The row opens its details on click; keep clicks here (and in the portalled modal) from reaching it.
+    // The row opens its details on click; keep clicks here (and in the portalled modals) from reaching it.
     <div onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
       <Menu position="bottom-end" withinPortal>
         <Menu.Target>
@@ -41,6 +42,9 @@ export function ImageActionsMenu({ kind, image }: { kind: ImageKind; image: WdsR
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
+          <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => setDialog('properties')}>
+            Properties…
+          </Menu.Item>
           {image.Enabled === false ? (
             <Menu.Item leftSection={<IconPlayerPlay size={14} />} onClick={() => void run('enable')}>
               Enable
@@ -51,13 +55,15 @@ export function ImageActionsMenu({ kind, image }: { kind: ImageKind; image: WdsR
             </Menu.Item>
           )}
           <Menu.Divider />
-          <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => setConfirming(true)}>
+          <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => setDialog('remove')}>
             Remove…
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
 
-      <Modal opened={confirming} onClose={() => setConfirming(false)} title={`Remove ${name}?`} centered>
+      <ImagePropertiesDialog kind={kind} image={image} opened={dialog === 'properties'} onClose={() => setDialog(null)} />
+
+      <Modal opened={dialog === 'remove'} onClose={() => setDialog(null)} title={`Remove ${name}?`} centered>
         <Text size="sm">
           {kind === 'boot'
             ? 'WDS deletes the boot image, and PXE clients can no longer boot it.'
@@ -65,14 +71,14 @@ export function ImageActionsMenu({ kind, image }: { kind: ImageKind; image: WdsR
           The file it was imported from isn't touched.
         </Text>
         <Group justify="flex-end" mt="lg">
-          <Button variant="default" onClick={() => setConfirming(false)}>
+          <Button variant="default" onClick={() => setDialog(null)}>
             Cancel
           </Button>
           <Button
             color="red"
             loading={action.isPending}
             onClick={async () => {
-              if (await run('remove')) setConfirming(false)
+              if (await run('remove')) setDialog(null)
             }}
           >
             Remove

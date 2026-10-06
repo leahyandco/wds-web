@@ -157,6 +157,23 @@ function global:Get-WdsImageIndexes {
     })
 }
 
+# The RemoteInstall folder: the root WDS's TFTP provider serves, set when WDS was initialized. Null if
+# WDS isn't set up.
+function global:Get-WdsRemoteInstallPath {
+    $tftp = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\WDSServer\Providers\WDSTFTP' -ErrorAction SilentlyContinue
+    if ($tftp -and $tftp.RootFolder -and (Test-Path -LiteralPath $tftp.RootFolder)) { $tftp.RootFolder.TrimEnd('\') } else { $null }
+}
+
+# Where WDS keeps an install image's unattend file: in the image group's folder, under a folder named
+# after the image's file.
+function global:Get-WdsImageUnattendPath {
+    param([Parameter(Mandatory)] $Image)
+
+    $root = Get-WdsRemoteInstallPath
+    if (-not $root) { throw "Can't find the RemoteInstall folder on $env:COMPUTERNAME." }
+    Join-Path $root ('Images\{0}\{1}\Unattend\ImageUnattend.xml' -f $Image.ImageGroup, [IO.Path]::GetFileNameWithoutExtension($Image.FileName))
+}
+
 # WDSUTIL only prints localized text, which the web service parses. Native stderr must not become a
 # terminating error, so this runs with ErrorActionPreference Continue and returns the exit code too.
 function global:Invoke-WdsUtil {

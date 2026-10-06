@@ -40,6 +40,9 @@ public sealed class SignInRequiredTests(SignInRequiredTests.ProductionApp app) :
     [InlineData("DELETE", "/api/devices/PC-01")]
     [InlineData("POST", "/api/devices/requests/7/approve")]
     [InlineData("POST", "/api/devices/requests/7/reject")]
+    [InlineData("PUT", "/api/boot-images/properties")]
+    [InlineData("PUT", "/api/install-images/properties")]
+    [InlineData("GET", "/api/install-images/unattend?name=Windows")]
     public async Task Refuses_anonymous_requests(string method, string path)
     {
         var response = await _client.SendAsync(new HttpRequestMessage(new HttpMethod(method), path) { Content = JsonContent.Create(new { }) });

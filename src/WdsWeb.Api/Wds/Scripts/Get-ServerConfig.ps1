@@ -8,9 +8,8 @@ $config = Invoke-WdsUtil -Arguments '/Get-Server', '/Show:Config'
 
 $remoteInstall = $null
 $bootPrograms = @()
-$tftp = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\WDSServer\Providers\WDSTFTP' -ErrorAction SilentlyContinue
-if ($tftp -and $tftp.RootFolder -and (Test-Path -LiteralPath $tftp.RootFolder)) {
-    $root = $tftp.RootFolder.TrimEnd('\')
+$root = Get-WdsRemoteInstallPath
+if ($root) {
     $drive = New-Object System.IO.DriveInfo ([System.IO.Path]::GetPathRoot($root))
     $remoteInstall = [ordered]@{ path = $root; totalBytes = $drive.TotalSize; freeBytes = $drive.AvailableFreeSpace }
     # Boot programs sit directly in Boot\<architecture> (-Include is ignored alongside -LiteralPath,

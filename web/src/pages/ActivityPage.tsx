@@ -1,5 +1,5 @@
 import { Alert, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, Title } from '@mantine/core'
-import { IconDeviceDesktopPlus, IconInfoCircle } from '@tabler/icons-react'
+import { IconAlertTriangle, IconDeviceDesktopPlus, IconInfoCircle } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useActivity } from '../api/queries'
 import type { BootSession, TftpTransfer } from '../api/types'
@@ -119,7 +119,14 @@ function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelec
                   <Text size="sm">{architectureLabel(session)}</Text>
                 </Table.Td>
                 <Table.Td>
-                  <BootStatusBadge status={session.status} />
+                  <Group gap={6} wrap="nowrap">
+                    <BootStatusBadge status={session.status} />
+                    {session.notes.some((note) => note.kind === 'unattendBlocked') && (
+                      <Badge color="orange" variant="light" tt="none">
+                        Unattend refused
+                      </Badge>
+                    )}
+                  </Group>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{session.bootImage ? baseName(session.bootImage) : EMPTY}</Text>
@@ -163,6 +170,15 @@ function SessionDetail({ session, onPrestage }: { session: BootSession; onPresta
           {bootStatus[session.status].description}
         </Text>
       </Group>
+      {session.notes
+        .filter((note) => note.kind === 'unattendBlocked')
+        .map((note) => (
+          <Alert key={note.time} color="orange" icon={<IconAlertTriangle />} title="WDS refused the unattend request">
+            At {formatDateTime(note.time)} Windows Setup asked for the WDS client unattend file, and WDS refused: hands-free
+            deployment has been off since the April 2026 update (CVE-2026-0386). So the WDS client asked its questions
+            (language, sign-in, which image) at the machine instead of taking the answers from the file.
+          </Alert>
+        ))}
       {session.prestaged !== true && (session.deviceId || session.macAddress) && (
         <Group>
           <Button variant="light" leftSection={<IconDeviceDesktopPlus size={16} />} onClick={onPrestage}>

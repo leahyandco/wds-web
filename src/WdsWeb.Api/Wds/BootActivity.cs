@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace WdsWeb.Api.Wds;
 
-/// <summary>An event from WDS's Operational log, with the named fields from its UserData block.</summary>
+/// <summary>An event from one of WDS's logs, with its named fields (ClientIP and so on).</summary>
 public sealed record WdsEventRecord(DateTimeOffset Time, int Id, IReadOnlyDictionary<string, string> Data);
 
 public enum BootStatus
@@ -33,6 +33,15 @@ public sealed record TftpTransfer(
     bool? Succeeded,
     string? ErrorCode);
 
+public enum BootNoteKind
+{
+    /// <summary>WDS refused Windows Setup's request for the WDS client unattend file (hands-free deployment is off).</summary>
+    UnattendBlocked,
+}
+
+/// <summary>Something that happened later in a boot, after the boot image loaded.</summary>
+public sealed record BootNote(DateTimeOffset Time, BootNoteKind Kind);
+
 /// <summary>One client's PXE boot and the files it then fetched over TFTP.</summary>
 public sealed record BootSession(
     string ClientIp,
@@ -45,13 +54,16 @@ public sealed record BootSession(
     DateTimeOffset LastSeen,
     BootStatus Status,
     string? BootImage,
-    IReadOnlyList<TftpTransfer> Transfers);
+    IReadOnlyList<TftpTransfer> Transfers,
+    IReadOnlyList<BootNote> Notes);
 
 /// <summary>
 /// Pieces WDS's PXE (4096) and TFTP (4099 started, 4100 completed, 4101 failed) events into
 /// per-client boot sessions. WDS logs the PXE request more than once per boot (before and after the
 /// F12 prompt), and the TFTP events carry only the client's IP, so events are grouped by IP, and a
 /// new session starts after a quiet gap or when the client PXE-boots again after loading an image.
+/// The image server's refusals of unattend requests (WDSIMGSRV 270) also carry only the IP, and are
+/// added to the session they belong to.
 /// </summary>
 public static partial class BootActivity
 {
@@ -59,6 +71,7 @@ public static partial class BootActivity
     public const int TftpStarted = 4099;
     public const int TftpCompleted = 4100;
     public const int TftpFailed = 4101;
+    public const int UnattendBlocked = 270;
 
     private static readonly TimeSpan SessionGap = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan StalledAfter = TimeSpan.FromMinutes(15);
@@ -106,6 +119,12 @@ public static partial class BootActivity
                     transfer.FinishedAt = record.Time;
                     transfer.Succeeded = record.Id == TftpCompleted;
                     transfer.ErrorCode = record.Data.GetValueOrDefault("ErrorCode");
+                    break;
+
+                case UnattendBlocked:
+                    // Setup asks once WinPE is up, so this belongs to the boot that loaded the image.
+                    if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(ip, record.Time);
+                    session.Notes.Add(new BootNote(record.Time, BootNoteKind.UnattendBlocked));
                     break;
 
                 default:
@@ -160,6 +179,7 @@ public static partial class BootActivity
         public int? ArchitectureCode { get; set; }
         public bool? Prestaged { get; set; }
         public List<Transfer> Transfers { get; } = [];
+        public List<BootNote> Notes { get; } = [];
 
         public bool LoadedImage => Transfers.Any(t => IsBootImage(t.FileName) && t.Succeeded == true);
 
@@ -172,7 +192,7 @@ public static partial class BootActivity
 
             return new BootSession(
                 ClientIp, MacAddress, DeviceId, architecture, ArchitectureCode, Prestaged, FirstSeen, LastSeen,
-                StatusOf(image, now), image?.FileName, Transfers.Select(t => t.Build()).ToList());
+                StatusOf(image, now), image?.FileName, Transfers.Select(t => t.Build()).ToList(), Notes);
         }
 
         private BootStatus StatusOf(Transfer? image, DateTimeOffset now)

@@ -62,6 +62,25 @@ public static class ImageEndpoints
         }
         api.MapPost("/image-groups/remove", (ImageGroupRef group, WdsScriptRunner wds, CancellationToken ct) =>
             RunActionAsync(wds, "ImageGroup", "Remove", group.Name, null, null, null, ct));
+
+        // Names, descriptions and display order, and install images' unattend files.
+        api.MapPut("/boot-images/properties", (BootImageChanges changes, WdsScriptRunner wds, CancellationToken ct) =>
+            SetPropertiesAsync(wds, ImageProperties.For(changes), ct));
+        api.MapPut("/install-images/properties", (InstallImageChanges changes, WdsScriptRunner wds, CancellationToken ct) =>
+            SetPropertiesAsync(wds, ImageProperties.For(changes), ct));
+        api.MapGet("/install-images/unattend", (string name, string? imageGroup, string? fileName, WdsScriptRunner wds, CancellationToken ct) =>
+            wds.RunAsync("Get-WdsImageUnattend", new Dictionary<string, object?>
+            {
+                ["Name"] = name,
+                ["ImageGroup"] = imageGroup,
+                ["FileName"] = fileName,
+            }, ct: ct));
+    }
+
+    private static async Task<IResult> SetPropertiesAsync(WdsScriptRunner wds, Dictionary<string, object?> parameters, CancellationToken ct)
+    {
+        await wds.RunAsync("Set-WdsImageProperties", parameters, retryOnBrokenSession: false, ct: ct);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> RunActionAsync(

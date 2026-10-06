@@ -12,7 +12,7 @@ import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { RecordTable, type RecordColumn } from '../components/RecordTable'
 import { formatBytes, formatDateTime, plural } from '../lib/format'
-import { asNumber, asString, pick } from '../lib/records'
+import { asNumber, asString, byDisplayOrder, pick } from '../lib/records'
 
 const columns: RecordColumn[] = [
   { key: 'Name', label: 'Name', render: (row) => <NameCell name={row.Name} description={row.Description} /> },
@@ -74,7 +74,11 @@ export function InstallImagesPage() {
           ) : (
             <Stack gap="xl">
               {groups.map((group) => (
-                <ImageGroup key={String(group.Name)} group={group} images={images.filter((i) => i.ImageGroup === group.Name)} />
+                <ImageGroup
+                  key={String(group.Name)}
+                  group={group}
+                  images={images.filter((i) => i.ImageGroup === group.Name).sort(byDisplayOrder)}
+                />
               ))}
             </Stack>
           )

@@ -4,6 +4,10 @@ import type { WdsRecord } from '../api/types'
 export const asString = (value: unknown) => (typeof value === 'string' ? value : null)
 export const asNumber = (value: unknown) => (typeof value === 'number' ? value : null)
 
+/** Images in the order WDS lists them to clients: by display order, lowest first, then by name. */
+export const byDisplayOrder = (a: WdsRecord, b: WdsRecord) =>
+  (asNumber(a.DisplayOrder) ?? 0) - (asNumber(b.DisplayOrder) ?? 0) || String(a.Name ?? '').localeCompare(String(b.Name ?? ''))
+
 /** The first of several property names that has a value. */
 export function pick(record: WdsRecord, ...names: string[]): unknown {
   for (const name of names) {

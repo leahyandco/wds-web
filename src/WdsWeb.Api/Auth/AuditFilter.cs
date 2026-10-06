@@ -19,7 +19,9 @@ public sealed class AuditFilter(ILoggerFactory loggers, IOptions<JsonOptions> js
         if (HttpMethods.IsGet(request.Method) || IsUploadChunk(context.HttpContext)) return await next(context);
 
         var user = context.HttpContext.User.Identity?.Name ?? "anonymous";
-        var details = string.Join(" ", context.Arguments.Where(IsWorthLogging).Select(a => JsonSerializer.Serialize(a, a!.GetType(), json.Value.SerializerOptions)));
+        var details = string.Join(" ", context.Arguments.Where(IsWorthLogging)
+            .Select(a => a is IAuditRedacted redacted ? redacted.ForAudit() : a)
+            .Select(a => JsonSerializer.Serialize(a, a!.GetType(), json.Value.SerializerOptions)));
         try
         {
             var result = await next(context);
@@ -40,4 +42,13 @@ public sealed class AuditFilter(ILoggerFactory loggers, IOptions<JsonOptions> js
     // Records are the request bodies here, and they carry a compiler-generated <Clone>$ method.
     private static bool IsWorthLogging(object? argument) =>
         argument is string or int or long or bool || argument?.GetType().GetMethod("<Clone>$") is not null;
+}
+
+/// <summary>
+/// A request body with something to keep out of the audit log, such as an unattend file, which can hold
+/// passwords. The log gets <see cref="ForAudit"/> instead of the body itself.
+/// </summary>
+public interface IAuditRedacted
+{
+    object ForAudit();
 }

@@ -117,6 +117,37 @@ public class BootActivityTests
         Assert.Null(session.MacAddress);
     }
 
+    [Fact]
+    public void Adds_a_refused_unattend_request_to_the_boot_that_loaded_the_image()
+    {
+        // As on WDS01 on 3 October: the image loads, then Setup's unattend request is refused.
+        var events = new[]
+        {
+            Pxe(0),
+            Transfer(5, BootActivity.TftpStarted, Image),
+            Transfer(20, BootActivity.TftpCompleted, Image),
+            UnattendRefused(42),
+        };
+
+        var session = Assert.Single(BootActivity.Build(events, T0.AddMinutes(5)));
+
+        Assert.Equal(BootStatus.Loaded, session.Status);
+        Assert.Equal(new BootNote(T0.AddSeconds(42), BootNoteKind.UnattendBlocked), Assert.Single(session.Notes));
+        Assert.Equal(T0.AddSeconds(42), session.LastSeen);
+    }
+
+    [Fact]
+    public void Keeps_a_refused_unattend_request_whose_boot_scrolled_out_of_the_log()
+    {
+        var session = Assert.Single(BootActivity.Build([UnattendRefused(0)], T0.AddMinutes(1)));
+
+        Assert.Single(session.Notes);
+        Assert.Equal(BootStatus.PxeOnly, session.Status);
+    }
+
+    private static WdsEventRecord UnattendRefused(int seconds) =>
+        new(T0.AddSeconds(seconds), BootActivity.UnattendBlocked, new Dictionary<string, string> { ["ClientIP"] = Ip });
+
     private static WdsEventRecord Pxe(int seconds, string ip = Ip, string mac = Mac) =>
         new(T0.AddSeconds(seconds), BootActivity.PxeBoot, new Dictionary<string, string>
         {

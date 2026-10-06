@@ -10,7 +10,7 @@ import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { RecordTable, type RecordColumn } from '../components/RecordTable'
 import { formatBytes, formatDateTime } from '../lib/format'
-import { asNumber, asString, pick } from '../lib/records'
+import { asNumber, asString, byDisplayOrder, pick } from '../lib/records'
 
 const columns: RecordColumn[] = [
   { key: 'Name', label: 'Name', render: (row) => <NameCell name={row.Name} description={row.Description} /> },
@@ -50,7 +50,7 @@ export function BootImagesPage() {
         <QueryState query={query}>
           {(rows) => (
             <RecordTable
-              rows={rows}
+              rows={[...rows].sort(byDisplayOrder)}
               columns={columns}
               empty="No boot images are registered."
               detailTitle={(row) => String(pick(row, 'Name') ?? 'Boot image')}
