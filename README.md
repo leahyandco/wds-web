@@ -43,6 +43,17 @@ WDS server (the Import button on the image pages).
 Files are offered from `C:\Users\*\Downloads`, `C:\ISO`, `C:\ISOs` and `C:\Images` on the server
 unless `Wds:ImageSearchPaths` says otherwise.
 
+## Devices
+
+Prestaged devices are known clients: WDS answers them even when it answers only known clients, and
+each can have its own PXE prompt, boot image and WDS client unattend file. Prestage one on the
+Devices page, or from a PXE boot on the Boot activity page, which fills in the IDs the client
+reported. Prefer the SMBIOS GUID where the machine has a real one: a MAC address belongs to the
+network adapter, so it follows a shared USB adapter from machine to machine.
+
+When the pending-device policy waits for approval (Server settings → Pending devices), unknown
+clients wait at their PXE screen and are listed under "Waiting for approval" to approve or reject.
+
 ## Development
 
 Requirements: .NET 10 SDK, Node 22 or later, and a WDS server to point at.

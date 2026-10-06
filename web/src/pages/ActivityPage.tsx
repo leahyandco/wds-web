@@ -1,9 +1,10 @@
-import { Alert, Badge, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, Title } from '@mantine/core'
-import { IconInfoCircle } from '@tabler/icons-react'
+import { Alert, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, Title } from '@mantine/core'
+import { IconDeviceDesktopPlus, IconInfoCircle } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useActivity } from '../api/queries'
 import type { BootSession, TftpTransfer } from '../api/types'
 import { BootStatusBadge } from '../components/BootStatusBadge'
+import { DeviceEditor } from '../components/DeviceEditor'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { architectureLabel, baseName, bootStatus, imageSeconds } from '../lib/boot'
@@ -18,6 +19,7 @@ const ranges = [
 export function ActivityPage() {
   const [hours, setHours] = useState('72')
   const [selected, setSelected] = useState<BootSession | null>(null)
+  const [prestaging, setPrestaging] = useState<BootSession | null>(null)
   const query = useActivity(Number(hours))
 
   return (
@@ -61,8 +63,14 @@ export function ActivityPage() {
         size="xl"
         title={selected ? `Boot from ${selected.macAddress ?? selected.clientIp}` : undefined}
       >
-        {selected && <SessionDetail session={selected} />}
+        {selected && <SessionDetail session={selected} onPrestage={() => setPrestaging(selected)} />}
       </Drawer>
+      <DeviceEditor
+        opened={prestaging !== null}
+        device={null}
+        seed={prestaging ? { guid: prestaging.deviceId, mac: prestaging.macAddress } : undefined}
+        onClose={() => setPrestaging(null)}
+      />
     </>
   )
 }
@@ -131,7 +139,7 @@ function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelec
   )
 }
 
-function SessionDetail({ session }: { session: BootSession }) {
+function SessionDetail({ session, onPrestage }: { session: BootSession; onPrestage: () => void }) {
   const facts: [string, string][] = [
     ['MAC address', session.macAddress ?? EMPTY],
     ['IP address', session.clientIp],
@@ -155,6 +163,13 @@ function SessionDetail({ session }: { session: BootSession }) {
           {bootStatus[session.status].description}
         </Text>
       </Group>
+      {session.prestaged !== true && (session.deviceId || session.macAddress) && (
+        <Group>
+          <Button variant="light" leftSection={<IconDeviceDesktopPlus size={16} />} onClick={onPrestage}>
+            Prestage this device
+          </Button>
+        </Group>
+      )}
       <Table withRowBorders={false} verticalSpacing={4}>
         <Table.Tbody>
           {facts.map(([label, value]) => (

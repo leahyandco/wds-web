@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
-using System.Text.RegularExpressions;
 
 namespace WdsWeb.Api.Wds;
 
@@ -50,7 +49,7 @@ public sealed record TransportSettings(
     bool Fallback);
 
 /// <summary>Builds the WDSUTIL commands for a settings change, rejecting anything out of range.</summary>
-public static partial class WdsSettingsCommands
+public static class WdsSettingsCommands
 {
     public static readonly string[] Architectures = ["x86", "x64", "arm", "arm64", "x86uefi", "x64uefi"];
     private static readonly string[] Prompts = ["OptIn", "OptOut", "NoPrompt", "Abort"];
@@ -72,13 +71,13 @@ public static partial class WdsSettingsCommands
             var architecture = Architecture(entry.Architecture);
             if (entry.BootProgram is not null)
             {
-                if (!BootProgramPath().IsMatch(entry.BootProgram))
+                if (!RemoteInstallPath.IsBootProgram(entry.BootProgram))
                     throw new InvalidRequestException($"{entry.BootProgram} isn't a boot program under RemoteInstall\\Boot (.com, .efi or .n12).");
                 commands.Add(["/Set-Server", $"/BootProgram:{entry.BootProgram}", $"/Architecture:{architecture}"]);
             }
             if (entry.BootImage is not null)
             {
-                if (entry.BootImage.Length > 0 && !BootImagePath().IsMatch(entry.BootImage))
+                if (entry.BootImage.Length > 0 && !RemoteInstallPath.IsBootImage(entry.BootImage))
                     throw new InvalidRequestException($"{entry.BootImage} isn't a boot image under RemoteInstall\\Boot\\<architecture>\\Images.");
                 commands.Add(["/Set-Server", $"/BootImage:{entry.BootImage}", $"/Architecture:{architecture}"]);
             }
@@ -99,7 +98,7 @@ public static partial class WdsSettingsCommands
         ];
         foreach (var file in s.UnattendFiles ?? [])
         {
-            if (file.File.Length > 0 && !UnattendPath().IsMatch(file.File))
+            if (file.File.Length > 0 && !RemoteInstallPath.IsUnattendFile(file.File))
                 throw new InvalidRequestException($"{file.File} isn't an .xml file under RemoteInstall.");
             commands.Add(["/Set-Server", "/WdsUnattend", $"/File:{file.File}", $"/Architecture:{Architecture(file.Architecture)}"]);
         }
@@ -166,9 +165,7 @@ public static partial class WdsSettingsCommands
         }
         else
         {
-            var hex = MacSeparators().Replace(value, "").ToUpperInvariant();
-            if (!MacHex().IsMatch(hex)) throw new InvalidRequestException($"{value} isn't a MAC address.");
-            value = string.Join('-', Enumerable.Range(0, 6).Select(i => hex.Substring(i * 2, 2)));
+            value = MacAddress.Normalize(value) ?? throw new InvalidRequestException($"{value} isn't a MAC address.");
         }
         return [$"/Address:{value}", $"/AddressType:{type}"];
     }
@@ -186,19 +183,4 @@ public static partial class WdsSettingsCommands
             : throw new InvalidRequestException($"{what} must be between {min} and {max}.");
 
     private static string YesNo(bool value) => value ? "Yes" : "No";
-
-    [GeneratedRegex(@"^[Bb]oot\\[A-Za-z0-9]+\\[A-Za-z0-9._-]+\.(com|efi|n12)$", RegexOptions.IgnoreCase)]
-    private static partial Regex BootProgramPath();
-
-    [GeneratedRegex(@"^[Bb]oot\\[A-Za-z0-9]+\\Images\\[A-Za-z0-9 ._-]+\.wim$", RegexOptions.IgnoreCase)]
-    private static partial Regex BootImagePath();
-
-    [GeneratedRegex(@"^(?!.*\.\.)[A-Za-z0-9 _.-]+(\\[A-Za-z0-9 _.-]+)*\.xml$", RegexOptions.IgnoreCase)]
-    private static partial Regex UnattendPath();
-
-    [GeneratedRegex("[-:. ]")]
-    private static partial Regex MacSeparators();
-
-    [GeneratedRegex("^[0-9A-F]{12}$")]
-    private static partial Regex MacHex();
 }

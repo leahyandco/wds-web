@@ -21,7 +21,7 @@ import { useState, type ReactNode } from 'react'
 import { useApplySettings, useBootImages } from '../api/queries'
 import type { ServerConfig, SettingsGroup, WdsRecord } from '../api/types'
 import { formatDuration } from '../lib/format'
-import { ARCHITECTURES, bootFolder, bootsEfi, sameText } from '../lib/settings'
+import { ARCHITECTURES, bootFolder, bootsEfi, promptOptions, sameText } from '../lib/settings'
 import { architectureValues, findNode, findValue, isYes, leadingNumber } from '../lib/wdsutil'
 
 const titles: Record<SettingsGroup, string> = {
@@ -113,13 +113,6 @@ function SettingsForm({
     </Stack>
   )
 }
-
-const promptOptions = [
-  { value: 'OptIn', label: 'Press F12 to network boot (OptIn)' },
-  { value: 'NoPrompt', label: 'Always network boot (NoPrompt)' },
-  { value: 'OptOut', label: 'Network boot unless Esc is pressed (OptOut)' },
-  { value: 'Abort', label: 'Never network boot (Abort)' },
-]
 
 function PxeForm({ config, onDone }: FormProps) {
   const s = config.sections

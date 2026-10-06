@@ -34,6 +34,12 @@ public sealed class SignInRequiredTests(SignInRequiredTests.ProductionApp app) :
     [InlineData("PUT", "/api/server/settings/pxe")]
     [InlineData("POST", "/api/server/restart")]
     [InlineData("POST", "/api/images/import")]
+    [InlineData("GET", "/api/devices")]
+    [InlineData("POST", "/api/devices")]
+    [InlineData("PUT", "/api/devices/PC-01")]
+    [InlineData("DELETE", "/api/devices/PC-01")]
+    [InlineData("POST", "/api/devices/requests/7/approve")]
+    [InlineData("POST", "/api/devices/requests/7/reject")]
     public async Task Refuses_anonymous_requests(string method, string path)
     {
         var response = await _client.SendAsync(new HttpRequestMessage(new HttpMethod(method), path) { Content = JsonContent.Create(new { }) });

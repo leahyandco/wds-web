@@ -24,3 +24,11 @@ export const bootsEfi = (architecture: string) => architecture.endsWith('uefi') 
 
 export const sameText = (a: string | null | undefined, b: string | null | undefined) =>
   (a ?? '').toLowerCase() === (b ?? '').toLowerCase()
+
+/** What a PXE client does about network booting, for the server's prompt policies and a device's own. */
+export const promptOptions = [
+  { value: 'OptIn', label: 'Press F12 to network boot (OptIn)' },
+  { value: 'NoPrompt', label: 'Always network boot (NoPrompt)' },
+  { value: 'OptOut', label: 'Network boot unless Esc is pressed (OptOut)' },
+  { value: 'Abort', label: 'Never network boot (Abort)' },
+]

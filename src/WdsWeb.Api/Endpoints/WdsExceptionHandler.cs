@@ -12,6 +12,8 @@ internal sealed class WdsExceptionHandler(IProblemDetailsService problemDetails,
         (int Status, string Title)? mapped = exception switch
         {
             InvalidRequestException => (StatusCodes.Status400BadRequest, "Can't do that"),
+            // A route or query value that doesn't parse, such as a request ID that isn't a number.
+            BadHttpRequestException bad => (bad.StatusCode, "Bad request"),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Not found"),
             UploadOffsetException => (StatusCodes.Status409Conflict, "Upload is at a different offset"),
             WdsScriptException => (StatusCodes.Status502BadGateway, "WDS command failed"),

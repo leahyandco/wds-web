@@ -109,6 +109,7 @@ var audited = app.MapGroup("").AddEndpointFilter<AuditFilter>();
 audited.MapWdsEndpoints();
 audited.MapImageEndpoints();
 audited.MapSettingsEndpoints();
+audited.MapDeviceEndpoints();
 app.MapFallbackToFile("index.html", staticFiles).AllowAnonymous();
 
 app.Run();

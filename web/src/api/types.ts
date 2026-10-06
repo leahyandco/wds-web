@@ -69,7 +69,33 @@ export interface InstallImages {
 export interface Devices {
   prestaged: WdsRecord[]
   autoAdd: WdsRecord[]
+  /** False while the pending-device policy is off; WDS then keeps no requests. */
+  pendingPolicyEnabled: boolean
   errors: string[]
+}
+
+/** A prestaged device's settings. Null or '' leaves a setting to the server. */
+export interface DeviceSettings {
+  group?: string | null
+  pxePromptPolicy?: string | null
+  bootImagePath?: string | null
+  wdsClientUnattend?: string | null
+}
+
+export interface NewDevice extends DeviceSettings {
+  name: string
+  deviceId: string
+}
+
+/** Changes to a device: null leaves a value as it is, '' clears it. */
+export interface DeviceChanges extends DeviceSettings {
+  deviceId?: string | null
+}
+
+export interface DeviceApproval {
+  name?: string | null
+  bootImagePath?: string | null
+  wdsClientUnattend?: string | null
 }
 
 export interface DriverPackage {

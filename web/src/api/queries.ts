@@ -3,6 +3,8 @@ import { apiGet, apiSend } from './client'
 import type {
   ActivityResponse,
   ConnectionInfo,
+  DeviceApproval,
+  DeviceChanges,
   Devices,
   DriverCatalog,
   EventsResponse,
@@ -11,6 +13,7 @@ import type {
   ImportJob,
   ImportRequestBody,
   InstallImages,
+  NewDevice,
   ServerConfig,
   ServerImageFile,
   SessionInfo,
@@ -181,6 +184,28 @@ export const useRestartWds = () => {
     },
   })
 }
+
+/** A change to devices, refreshing the device list once it's made. */
+const useDeviceMutation = <T>(mutationFn: (input: T) => Promise<unknown>) => {
+  const queryClient = useQueryClient()
+  return useMutation({ mutationFn, onSuccess: () => queryClient.invalidateQueries({ queryKey: ['devices'] }) })
+}
+
+export const useAddDevice = () => useDeviceMutation((device: NewDevice) => apiSend('POST', '/devices', device))
+
+export const useChangeDevice = () =>
+  useDeviceMutation(({ name, changes }: { name: string; changes: DeviceChanges }) =>
+    apiSend('PUT', `/devices/${encodeURIComponent(name)}`, changes),
+  )
+
+export const useRemoveDevice = () => useDeviceMutation((name: string) => apiSend('DELETE', `/devices/${encodeURIComponent(name)}`))
+
+export const useAnswerDeviceRequest = () =>
+  useDeviceMutation(({ requestId, approval }: { requestId: number; approval: DeviceApproval | 'reject' }) =>
+    approval === 'reject'
+      ? apiSend('POST', `/devices/requests/${requestId}/reject`)
+      : apiSend('POST', `/devices/requests/${requestId}/approve`, approval),
+  )
 
 export const useRemoveImageGroup = () => {
   const queryClient = useQueryClient()

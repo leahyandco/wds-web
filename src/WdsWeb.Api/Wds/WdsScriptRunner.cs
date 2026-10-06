@@ -55,6 +55,19 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
     }
 
     /// <summary>
+    /// Runs WDSUTIL commands that the caller built and validated, in order, stopping at the first that
+    /// fails. Never retried: an earlier command may already have changed the server.
+    /// </summary>
+    public Task<JsonElement> RunWdsUtilAsync(IReadOnlyList<string[]> commands, CancellationToken ct = default)
+    {
+        if (commands.Count == 0) throw new InvalidRequestException("There's nothing to change.");
+        return RunAsync("Invoke-WdsUtilCommands", new Dictionary<string, object?>
+        {
+            ["Commands"] = commands.Cast<object>().ToArray(),
+        }, retryOnBrokenSession: false, ct: ct);
+    }
+
+    /// <summary>
     /// Runs a long script, such as an import, on a session of its own, reporting its information,
     /// warning and progress records as they arrive. Never retried, since a job may already have
     /// changed the server when its session breaks.

@@ -9,6 +9,11 @@ if (Get-Module -ListAvailable -Name WDS) {
     $global:WdsModuleLoaded = $true
 }
 
+# The scripts set $ErrorActionPreference = 'Stop', but the WDS cmdlets come from a module, which doesn't
+# see a caller's preference: their errors would only be written, and a failed import or removal would
+# look like it worked. Make them stop by default; an explicit -ErrorAction still wins.
+$global:PSDefaultParameterValues['*-Wds*:ErrorAction'] = 'Stop'
+
 function global:Assert-WdsModule {
     if (-not $global:WdsModuleLoaded) {
         throw "The WDS PowerShell module isn't installed on $env:COMPUTERNAME. Install the WDS role or its management tools (WDS-AdminPack)."
