@@ -1,14 +1,18 @@
-import { Alert, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, Title } from '@mantine/core'
+import { Alert, Anchor, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, Timeline, Title } from '@mantine/core'
 import { IconAlertTriangle, IconDeviceDesktopPlus, IconInfoCircle } from '@tabler/icons-react'
 import { useState } from 'react'
-import { useActivity } from '../api/queries'
-import type { BootSession, TftpTransfer } from '../api/types'
+import { Link } from 'react-router'
+import { useActivity, useServerConfig } from '../api/queries'
+import type { BootSession, Deployment, TftpTransfer } from '../api/types'
 import { BootStatusBadge } from '../components/BootStatusBadge'
+import { DeploymentStageBadge } from '../components/DeploymentStageBadge'
 import { DeviceEditor } from '../components/DeviceEditor'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { architectureLabel, baseName, bootStatus, imageSeconds } from '../lib/boot'
+import { deploymentStage } from '../lib/deployments'
 import { EMPTY, formatAgo, formatBytes, formatDateTime } from '../lib/format'
+import { findValue, isYes } from '../lib/wdsutil'
 
 const ranges = [
   { label: '24 hours', value: '24' },
@@ -21,12 +25,14 @@ export function ActivityPage() {
   const [selected, setSelected] = useState<BootSession | null>(null)
   const [prestaging, setPrestaging] = useState<BootSession | null>(null)
   const query = useActivity(Number(hours))
+  const config = useServerConfig()
+  const clientLogging = config.data ? findValue(config.data.sections, ['WDS Client Policy', 'Logging policy', 'Enabled']) : null
 
   return (
     <>
       <PageHeader
         title="Boot activity"
-        description="PXE boots and boot image downloads, from WDS's event log. Refreshes every 10 seconds."
+        description="PXE boots, boot image downloads and installs, from WDS's event logs. Refreshes every 10 seconds."
         onRefresh={() => void query.refetch()}
         refreshing={query.isFetching}
       />
@@ -37,6 +43,15 @@ export function ActivityPage() {
       <QueryState query={query}>
         {(activity) => (
           <Stack>
+            {clientLogging !== null && !isYes(clientLogging) && (
+              <Alert color="blue" icon={<IconInfoCircle />}>
+                To follow installs here (which image each machine chose, and how far it got), turn on WDS client logging under{' '}
+                <Anchor component={Link} to="/server" inherit>
+                  Server settings → WDS client
+                </Anchor>
+                .
+              </Alert>
+            )}
             {activity.logStartsAt && (
               <Alert color="blue" icon={<IconInfoCircle />}>
                 WDS keeps only {formatBytes(activity.logMaxBytes)} of these events, which currently reaches back to{' '}
@@ -77,7 +92,7 @@ export function ActivityPage() {
 
 function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelect: (session: BootSession) => void }) {
   return (
-    <Table.ScrollContainer minWidth={820}>
+    <Table.ScrollContainer minWidth={960}>
       <Table striped highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           <Table.Tr>
@@ -87,6 +102,7 @@ function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelec
             <Table.Th>Status</Table.Th>
             <Table.Th>Boot image</Table.Th>
             <Table.Th>Download</Table.Th>
+            <Table.Th>Install</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -126,6 +142,11 @@ function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelec
                         Unattend refused
                       </Badge>
                     )}
+                    {session.notes.some((note) => note.kind === 'notRecognized') && (
+                      <Badge color="orange" variant="light" tt="none">
+                        Not prestaged
+                      </Badge>
+                    )}
                   </Group>
                 </Table.Td>
                 <Table.Td>
@@ -136,6 +157,20 @@ function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelec
                     {seconds != null ? `${seconds.toFixed(0)} s` : EMPTY}
                     {image?.fileSize ? ` · ${formatBytes(image.fileSize)}` : ''}
                   </Text>
+                </Table.Td>
+                <Table.Td>
+                  {session.deployment ? (
+                    <Stack gap={2} align="flex-start">
+                      <DeploymentStageBadge stage={session.deployment.stage} />
+                      {session.deployment.imageName && (
+                        <Text size="xs" c="dimmed">
+                          {session.deployment.imageName}
+                        </Text>
+                      )}
+                    </Stack>
+                  ) : (
+                    <Text size="sm">{EMPTY}</Text>
+                  )}
                 </Table.Td>
               </Table.Tr>
             )
@@ -179,6 +214,15 @@ function SessionDetail({ session, onPrestage }: { session: BootSession; onPresta
             (language, sign-in, which image) at the machine instead of taking the answers from the file.
           </Alert>
         ))}
+      {session.notes.some((note) => note.kind === 'notRecognized') && (
+        <Alert color="orange" icon={<IconAlertTriangle />} title="WDS ignored this client">
+          It isn't prestaged, and WDS answers only known clients. Prestage it below, or let WDS answer all clients under{' '}
+          <Anchor component={Link} to="/server" inherit>
+            Server settings → PXE response
+          </Anchor>
+          .
+        </Alert>
+      )}
       {session.prestaged !== true && (session.deviceId || session.macAddress) && (
         <Group>
           <Button variant="light" leftSection={<IconDeviceDesktopPlus size={16} />} onClick={onPrestage}>
@@ -203,6 +247,8 @@ function SessionDetail({ session, onPrestage }: { session: BootSession; onPresta
         </Table.Tbody>
       </Table>
 
+      {session.deployment && <DeploymentDetail deployment={session.deployment} />}
+
       <div>
         <Title order={5} mb="xs">
           TFTP downloads
@@ -217,6 +263,68 @@ function SessionDetail({ session, onPrestage }: { session: BootSession; onPresta
       </div>
     </Stack>
   )
+}
+
+/** The install as the WDS client reported it: what it chose, how long each part took, and what happened. */
+function DeploymentDetail({ deployment }: { deployment: Deployment }) {
+  const took = (from: string | null, to: string | null) =>
+    from && to ? formatMinutes((new Date(to).getTime() - new Date(from).getTime()) / 1000) : null
+  const download = took(deployment.transferStartedAt, deployment.transferFinishedAt)
+  const apply = took(deployment.applyStartedAt, deployment.applyFinishedAt)
+  const facts: [string, string][] = [
+    ['Image', deployment.imageName ? `${deployment.imageName}${deployment.imageGroup ? ` (${deployment.imageGroup})` : ''}` : EMPTY],
+    ...(deployment.userName ? ([['Signed in as', deployment.userName]] as [string, string][]) : []),
+    ['Download', download ? `${download}${deployment.multicastNamespace ? ', by multicast' : ''}` : EMPTY],
+    ['Apply', apply ?? EMPTY],
+    ['Last heard from', `${formatDateTime(deployment.lastSeen)} (${formatAgo(deployment.lastSeen)})`],
+  ]
+
+  return (
+    <div>
+      <Group gap="sm" mb="xs">
+        <Title order={5}>Install</Title>
+        <DeploymentStageBadge stage={deployment.stage} />
+      </Group>
+      <Text size="sm" c="dimmed" mb="sm">
+        {deploymentStage[deployment.stage].description}
+      </Text>
+      {deployment.error && (
+        <Alert color="red" icon={<IconAlertTriangle />} mb="sm">
+          {deployment.error}
+        </Alert>
+      )}
+      <Table withRowBorders={false} verticalSpacing={4} mb="md">
+        <Table.Tbody>
+          {facts.map(([label, value]) => (
+            <Table.Tr key={label}>
+              <Table.Td w={160}>
+                <Text size="sm" c="dimmed">
+                  {label}
+                </Text>
+              </Table.Td>
+              <Table.Td>
+                <Text size="sm">{value}</Text>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <Timeline bulletSize={12} lineWidth={2}>
+        {deployment.timeline.map((note, index) => (
+          <Timeline.Item key={index} color={note.level === 'error' ? 'red' : note.level === 'warning' ? 'orange' : 'blue'} title={note.text}>
+            <Text size="xs" c="dimmed">
+              {formatDateTime(note.time)}
+            </Text>
+          </Timeline.Item>
+        ))}
+      </Timeline>
+    </div>
+  )
+}
+
+function formatMinutes(seconds: number) {
+  if (seconds < 90) return `${Math.round(seconds)} s`
+  return `${Math.round(seconds / 60)} min`
 }
 
 function TransferTable({ transfers }: { transfers: TftpTransfer[] }) {

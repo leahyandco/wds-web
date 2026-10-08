@@ -4,6 +4,8 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Development settings for your own WDS server go in user secrets (see the README), not in the repo. -->
+    <UserSecretsId>wds-web-dev</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

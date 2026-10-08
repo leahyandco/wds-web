@@ -157,11 +157,11 @@ public class WdsSettingsCommandsTests
             Interface Bind Policy:
                  Policy: Exclude Registered
                  Registered interfaces:
-                     MAC => 00B056882FDC
+                     MAC => 00005E005302
                      IP => 192.0.2.9
             """);
 
         var registered = nodes[0].Children[0].Children[1].Children;
-        Assert.Equal([("MAC", "00B056882FDC"), ("IP", "192.0.2.9")], registered.Select(n => (n.Name, n.Value)));
+        Assert.Equal([("MAC", "00005E005302"), ("IP", "192.0.2.9")], registered.Select(n => (n.Name, n.Value)));
     }
 }

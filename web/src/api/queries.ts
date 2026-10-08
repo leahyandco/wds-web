@@ -3,6 +3,7 @@ import { apiGet, apiSend } from './client'
 import type {
   ActivityResponse,
   ConnectionInfo,
+  ConsoleInfo,
   DeviceApproval,
   DeviceChanges,
   Devices,
@@ -59,6 +60,13 @@ export const useConnection = () =>
   useQuery({
     queryKey: ['connection'],
     queryFn: ({ signal }) => apiGet<ConnectionInfo>('/connection', signal),
+    staleTime: Infinity,
+  })
+
+export const useConsoleInfo = () =>
+  useQuery({
+    queryKey: ['console'],
+    queryFn: ({ signal }) => apiGet<ConsoleInfo>('/console', signal),
     staleTime: Infinity,
   })
 
@@ -249,6 +257,15 @@ export const useAnswerDeviceRequest = () =>
       ? apiSend('POST', `/devices/requests/${requestId}/reject`)
       : apiSend('POST', `/devices/requests/${requestId}/approve`, approval),
   )
+
+/** Allows or blocks hands-free deployment (the CVE-2026-0386 override). */
+export const useSetHandsFree = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (allow: boolean) => apiSend<{ allowHandsFreeFunctionality: number }>('PUT', '/server/hands-free', { allow }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['server-config'] }),
+  })
+}
 
 export const useRemoveImageGroup = () => {
   const queryClient = useQueryClient()

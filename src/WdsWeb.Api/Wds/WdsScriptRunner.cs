@@ -13,8 +13,9 @@ namespace WdsWeb.Api.Wds;
 public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> options, ILogger<WdsScriptRunner> logger)
 {
     /// <param name="retryOnBrokenSession">
-    /// Retry once on a new session if the pooled one had died (idle timeout, server reboot). Only
-    /// safe for scripts that don't change anything.
+    /// Retry once on a new session if the pooled one had died (idle timeout, server reboot), or if the
+    /// WDS module's RPC call failed (its WMI provider host crashed, and Windows restarts it on the next
+    /// call). Only safe for scripts that don't change anything.
     /// </param>
     /// <param name="timeout">How long to allow; defaults to <see cref="WdsOptions.CommandTimeout"/>.</param>
     public async Task<JsonElement> RunAsync(
@@ -42,6 +43,10 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
                 if (!retryOnBrokenSession || attempt > 1)
                     throw new WdsConnectionException($"Lost the PowerShell session on {pool.TargetName}: {ex.Message}", ex);
                 logger.LogInformation("The session on {Target} had closed; retrying {Script} on a new one", pool.TargetName, scriptName);
+            }
+            catch (WdsScriptException ex) when (retryOnBrokenSession && attempt == 1 && IsFailedRpc(ex))
+            {
+                logger.LogInformation("{Script} on {Target} hit a failed RPC call ({Error}); retrying it once", scriptName, pool.TargetName, ex.Message);
             }
             catch (OperationCanceledException)
             {
@@ -127,8 +132,10 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
             {
                 output = await ps.InvokeAsync();
             }
-            catch (PipelineStoppedException) when (ct.IsCancellationRequested)
+            catch (RuntimeException) when (ct.IsCancellationRequested)
             {
+                // Stopping a pipeline surfaces in several shapes ("The pipeline has been stopped"); whatever
+                // the shape, a command that failed after being cancelled was cancelled.
                 throw new OperationCanceledException(ct);
             }
             catch (RuntimeException ex) when (!IsBrokenSession(ex))
@@ -149,4 +156,12 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
 
     private static bool IsBrokenSession(Exception ex) =>
         ex is PSRemotingTransportException or PSRemotingDataStructureException or InvalidRunspaceStateException;
+
+    // RPC_S_CALL_FAILED (0x800706BE) or RPC_S_SERVER_UNAVAILABLE (0x800706BA) from the WDS module's CIM
+    // provider; the exception arrives serialized from the WDS server, so match its message or code.
+    private static bool IsFailedRpc(WdsScriptException ex) =>
+        ex.Message.Contains("remote procedure call", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("RPC server", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("0x800706BE", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("0x800706BA", StringComparison.OrdinalIgnoreCase);
 }

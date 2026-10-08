@@ -147,7 +147,7 @@ function DeviceForm({ device, seed, onDone, bootImages }: DeviceFormProps & { bo
         onChange={(e) => setDeviceId(e.currentTarget.value)}
         error={idProblem}
         description="The MAC address, or the SMBIOS GUID, the client reports when it PXE boots. Boot activity shows both."
-        placeholder="00-00-5E-00-53-01 or {E8A3EFAC-201F-4E69-953E-B2DAA1E8B1B6}"
+        placeholder="00-B0-56-88-2F-DC or {E8A3EFAC-201F-4E69-953E-B2DAA1E8B1B6}"
         styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
       />
       <TextInput label="Group" value={group} onChange={(e) => setGroup(e.currentTarget.value)} description="Optional, for your own sorting." />

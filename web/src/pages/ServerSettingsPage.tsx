@@ -5,6 +5,8 @@ import { useState } from 'react'
 import { useRestartWds, useServerConfig } from '../api/queries'
 import type { ServerConfig, SettingsGroup } from '../api/types'
 import { ConfigRows } from '../components/ConfigRows'
+import { ConsoleCard } from '../components/ConsoleCard'
+import { HandsFreeDialog } from '../components/HandsFreeDialog'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { SettingsEditor } from '../components/SettingsEditor'
@@ -37,6 +39,7 @@ export function ServerSettingsPage() {
 
 function Settings({ config }: { config: ServerConfig }) {
   const [editing, setEditing] = useState<SettingsGroup | null>(null)
+  const [handsFree, setHandsFree] = useState(false)
   const standalone = findValue(config.sections, ['Server State', 'Standalone configuration'])
   const answerClients = findValue(config.sections, ['Answer Policy', 'Answer clients'])
   const knownOnly = findValue(config.sections, ['Answer Policy', 'Answer only known clients'])
@@ -63,7 +66,12 @@ function Settings({ config }: { config: ServerConfig }) {
           value={answerClients === 'No' ? 'No' : answerClients === 'Yes' ? (knownOnly === 'Yes' ? 'Known clients only' : 'All clients') : EMPTY}
           onEdit={() => setEditing('pxe')}
         />
-        <Summary label="Hands-free deployment" value={handsFreeLabel(config.allowHandsFreeFunctionality)} detail="Blocked by default since the April 2026 update (CVE-2026-0386)" />
+        <Summary
+          label="Hands-free deployment"
+          value={handsFreeLabel(config.allowHandsFreeFunctionality)}
+          detail="Blocked by default since the April 2026 update (CVE-2026-0386)"
+          onEdit={() => setHandsFree(true)}
+        />
         <Card withBorder padding="md">
           <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
             RemoteInstall
@@ -113,6 +121,8 @@ function Settings({ config }: { config: ServerConfig }) {
         })}
       </SimpleGrid>
 
+      <ConsoleCard />
+
       <Accordion variant="contained">
         <Accordion.Item value="raw">
           <Accordion.Control>Raw WDSUTIL output</Accordion.Control>
@@ -124,6 +134,7 @@ function Settings({ config }: { config: ServerConfig }) {
 
       {/* Keyed so each opening starts from the current settings. */}
       <SettingsEditor key={editing ?? 'closed'} group={editing} config={config} onClose={() => setEditing(null)} />
+      <HandsFreeDialog opened={handsFree} allowed={config.allowHandsFreeFunctionality === 1} onClose={() => setHandsFree(false)} />
     </Stack>
   )
 }
@@ -169,7 +180,7 @@ function RestartDialog({ opened, onClose }: { opened: boolean; onClose: () => vo
 function handsFreeLabel(value: number | null): string {
   if (value === 1) return 'Allowed (insecure override)'
   if (value === 0) return 'Blocked'
-  return 'Not set'
+  return 'Blocked (not set)'
 }
 
 function Summary({ label, value, detail, onEdit }: { label: string; value: string; detail?: string; onEdit?: () => void }) {

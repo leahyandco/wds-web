@@ -27,6 +27,7 @@ public static class AuthEndpoints
                 return Results.Ok(new
                 {
                     status = "ok",
+                    version = ConsoleInfo.Version,
                     server = target.GetProperty("computerName"),
                     psVersion = target.GetProperty("psVersion"),
                     wdsService = target.GetProperty("wdsService"),

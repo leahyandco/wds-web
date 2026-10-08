@@ -7,6 +7,7 @@ import {
   Group,
   Menu,
   NavLink,
+  Text,
   Title,
   Tooltip,
   useComputedColorScheme,
@@ -28,7 +29,7 @@ import {
   IconUser,
 } from '@tabler/icons-react'
 import { Outlet, NavLink as RouterNavLink, useLocation } from 'react-router'
-import { useConnection, useSignOut, useTarget } from '../api/queries'
+import { useConnection, useConsoleInfo, useSignOut, useTarget } from '../api/queries'
 import type { SessionInfo } from '../api/types'
 
 const links = [
@@ -67,17 +68,22 @@ export function AppLayout({ session }: { session: SessionInfo }) {
       </AppShell.Header>
 
       <AppShell.Navbar p="xs">
-        {links.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            component={RouterNavLink}
-            to={to}
-            label={label}
-            leftSection={<Icon size={18} stroke={1.6} />}
-            active={to === '/' ? pathname === '/' : pathname.startsWith(to)}
-            onClick={close}
-          />
-        ))}
+        <AppShell.Section grow>
+          {links.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              component={RouterNavLink}
+              to={to}
+              label={label}
+              leftSection={<Icon size={18} stroke={1.6} />}
+              active={to === '/' ? pathname === '/' : pathname.startsWith(to)}
+              onClick={close}
+            />
+          ))}
+        </AppShell.Section>
+        <AppShell.Section>
+          <Version />
+        </AppShell.Section>
       </AppShell.Navbar>
 
       <AppShell.Main>
@@ -106,6 +112,16 @@ function ServerStatus() {
         {connection.data?.mode === 'Remote' ? ' (remote)' : ''}
       </Badge>
     </Tooltip>
+  )
+}
+
+function Version() {
+  const { data } = useConsoleInfo()
+  if (!data) return null
+  return (
+    <Text size="xs" c="dimmed" px="sm" py={6}>
+      WDS Console {data.version}
+    </Text>
   )
 }
 

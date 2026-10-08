@@ -25,7 +25,7 @@ export function SignInPage({ server }: { server: string }) {
             <div>
               <Title order={3}>WDS Console</Title>
               <Text size="sm" c="dimmed" mt={4}>
-                Sign in with a Windows account that's an administrator on {server}, such as CONTOSO\you or you@contoso.com.
+                Sign in with your Windows account, such as DOMAIN\you or you@domain, to manage WDS on {server}.
               </Text>
             </div>
             <TextInput

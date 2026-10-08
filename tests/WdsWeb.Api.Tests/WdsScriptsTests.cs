@@ -38,6 +38,7 @@ public class WdsScriptsTests
     [InlineData("Invoke-WdsUtilCommands")]
     [InlineData("Set-WdsImageProperties")]
     [InlineData("Get-WdsImageUnattend")]
+    [InlineData("Set-WdsHandsFree")]
     [InlineData("Restart-WdsService")]
     public void The_scripts_the_endpoints_use_are_embedded(string name)
     {

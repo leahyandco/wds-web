@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- The release version, shown in the console and used for the release package's name. -->
+    <Version>0.1.0</Version>
+    <Product>WDS Console</Product>
+  </PropertyGroup>
+</Project>

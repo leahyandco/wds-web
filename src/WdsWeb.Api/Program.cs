@@ -19,14 +19,24 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : null,
 });
 
-// This machine's own settings (HTTPS port and certificate, allowed groups) live outside the install
-// folder, so deploying a new build never overwrites them.
+// The site's own settings (which WDS server, who may sign in, the HTTPS port and certificate) live in
+// C:\ProgramData\WdsWeb\settings.json, outside the install folder, so an update never overwrites them.
+// WDSWEB_SETTINGS can point elsewhere. Development uses user secrets instead (see the README).
 var machineData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "WdsWeb");
-builder.Configuration.AddJsonFile(Path.Combine(machineData, "settings.json"), optional: true, reloadOnChange: false);
+var settingsFile = Environment.GetEnvironmentVariable("WDSWEB_SETTINGS") is { Length: > 0 } custom ? custom : Path.Combine(machineData, "settings.json");
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddJsonFile(settingsFile, optional: true, reloadOnChange: false);
+    // Environment variables (Auth__AllowedGroups and the like) and the command line still win over the file.
+    builder.Configuration.AddEnvironmentVariables();
+    builder.Configuration.AddCommandLine(args);
+}
 
 builder.Services.AddWindowsService(options => options.ServiceName = "WdsWeb");
 builder.Logging.AddEventLog(settings => settings.SourceName = "WDS Console");
 builder.Logging.AddFilter<EventLogLoggerProvider>("WdsWeb.Audit", LogLevel.Information);
+// Who may sign in, logged once at startup, so it's on record next to the audit log.
+builder.Logging.AddFilter<EventLogLoggerProvider>(typeof(WindowsSignIn).FullName, LogLevel.Information);
 
 UseHttpsIfConfigured(builder);
 
@@ -42,9 +52,17 @@ builder.Services.AddHostedService(services => services.GetRequiredService<Import
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<WdsExceptionHandler>();
 
-var auth = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
-builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
+var authSection = builder.Configuration.GetSection(AuthOptions.SectionName);
+var auth = authSection.Get<AuthOptions>() ?? new AuthOptions();
+builder.Services.Configure<AuthOptions>(authSection);
+builder.Services.PostConfigure<AuthOptions>(options =>
+{
+    // Lists can also be one "a;b" string, as in an environment variable.
+    options.AllowedGroups = AuthOptions.ReadList(authSection.GetSection(nameof(AuthOptions.AllowedGroups)));
+    options.AllowedUsers = AuthOptions.ReadList(authSection.GetSection(nameof(AuthOptions.AllowedUsers)));
+});
 builder.Services.AddSingleton<WindowsSignIn>();
+builder.Services.AddSingleton(new ConsoleInfo(settingsFile));
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(cookie =>
 {
     cookie.Cookie.Name = "wdsweb";
@@ -91,6 +109,8 @@ var app = builder.Build();
 
 if (!auth.Enabled && !app.Environment.IsDevelopment())
     app.Logger.LogWarning("Sign-in is turned off (Auth:Enabled is false): anyone who can reach this service can change WDS.");
+// Say who may sign in, and flag names Windows can't find, without holding up startup on a slow domain controller.
+if (auth.Enabled) _ = Task.Run(app.Services.GetRequiredService<WindowsSignIn>().LogAllowed);
 
 app.UseExceptionHandler();
 
@@ -105,6 +125,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapAuthEndpoints();
+app.MapConsoleEndpoints();
 var audited = app.MapGroup("").AddEndpointFilter<AuditFilter>();
 audited.MapWdsEndpoints();
 audited.MapImageEndpoints();
@@ -121,7 +142,7 @@ static void SetCacheHeaders(StaticFileResponseContext context) =>
         ? "public, max-age=31536000, immutable"
         : "no-cache";
 
-// With Https:Port and Https:CertificateThumbprint set (by the deployment script, in settings.json),
+// With Https:Port and Https:CertificateThumbprint set (by Install-WdsWeb.ps1, in settings.json),
 // listen on that port only, using that certificate from the machine's personal store. Without them,
 // the launch profile or ASPNETCORE_URLS decides, as in development.
 static void UseHttpsIfConfigured(WebApplicationBuilder builder)

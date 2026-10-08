@@ -1,17 +1,23 @@
-# PXE boots (4096) and TFTP downloads started, completed and failed (4099/4100/4101), with their
+# PXE boots (4096), TFTP downloads started, completed and failed (4099/4100/4101), and, with WDS client
+# logging on, the WDS client's own events (4102-4132 here, 4113/4114 in the Admin log), with their
 # named fields. The web service pieces these into per-client boot sessions. Also reports how far back
 # the Operational log reaches, since it is small and circular.
 param([int] $Hours = 72)
 $ErrorActionPreference = 'Stop'
 
 $logName = 'Microsoft-Windows-Deployment-Services-Diagnostics/Operational'
-$filter = @{ LogName = $logName; Id = 4096, 4099, 4100, 4101; StartTime = (Get-Date).AddHours(-$Hours) }
+$within = "TimeCreated[timediff(@SystemTime) <= $([long]$Hours * 3600000)]"
 
 $records = @()
-try {
-    $records = @(Get-WinEvent -FilterHashtable $filter -MaxEvents 20000)
-} catch {
-    if ($_.FullyQualifiedErrorId -notlike 'NoMatching*') { throw }
+foreach ($query in @(
+    @{ LogName = $logName; FilterXPath = "*[System[EventID >= 4096 and EventID <= 4132 and $within]]" }
+    @{ LogName = 'Microsoft-Windows-Deployment-Services-Diagnostics/Admin'; FilterXPath = "*[System[(EventID = 4113 or EventID = 4114) and $within]]" }
+)) {
+    try {
+        $records += @(Get-WinEvent @query -MaxEvents 20000)
+    } catch {
+        if ($_.FullyQualifiedErrorId -notlike 'NoMatching*') { throw }
+    }
 }
 
 # Later in a boot, Windows Setup asks WDS's image server for the WDS client unattend file. Since the

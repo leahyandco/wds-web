@@ -6,8 +6,9 @@ namespace WdsWeb.Api.Wds;
 
 /// <summary>
 /// The staging folder on the WDS server, where uploads land and imports keep temporary files. This
-/// process reaches it directly in Local mode, and through the server's administrative share (C$)
-/// in Remote mode, connecting with the same credential as the PowerShell sessions.
+/// process reaches it directly in Local mode, and in Remote mode through a share: Wds:StagingShare,
+/// or else the server's administrative share (C$), connecting with the same credential as the
+/// PowerShell sessions.
 /// </summary>
 public sealed class StagingArea
 {
@@ -26,9 +27,20 @@ public sealed class StagingArea
         if (ServerRoot.Length < 4 || ServerRoot[1] != ':' || ServerRoot[2] != '\\' || !char.IsAsciiLetter(ServerRoot[0]))
             throw new InvalidOperationException(@"Wds:StagingPath must be a folder on a drive of the WDS server, such as C:\WdsWeb\Staging.");
 
-        LocalRoot = _options.Mode == WdsConnectionMode.Remote
-            ? $@"\\{_options.ComputerName}\{ServerRoot[0]}${ServerRoot[2..]}"
-            : ServerRoot;
+        if (_options.Mode == WdsConnectionMode.Local)
+        {
+            LocalRoot = ServerRoot;
+        }
+        else if (!string.IsNullOrWhiteSpace(_options.StagingShare))
+        {
+            LocalRoot = _options.StagingShare.Trim().TrimEnd('\\');
+            if (!LocalRoot.StartsWith(@"\\", StringComparison.Ordinal) || LocalRoot.Count(c => c == '\\') < 3)
+                throw new InvalidOperationException(@"Wds:StagingShare must be a share such as \\wds01\WdsStaging.");
+        }
+        else
+        {
+            LocalRoot = $@"\\{_options.ComputerName}\{ServerRoot[0]}${ServerRoot[2..]}";
+        }
     }
 
     /// <summary>The staging folder as the WDS server sees it, e.g. C:\WdsWeb\Staging.</summary>
@@ -73,7 +85,8 @@ public sealed class StagingArea
         {
             if (_connected) return;
 
-            var share = $@"\\{_options.ComputerName}\{ServerRoot[0]}$";
+            // \\server\share: the first two parts of the staging folder's UNC path.
+            var share = string.Join('\\', LocalRoot.Split('\\').Take(4));
             var credential = _pool.Credential?.GetNetworkCredential();
             var userName = credential is null ? null
                 : string.IsNullOrEmpty(credential.Domain) ? credential.UserName

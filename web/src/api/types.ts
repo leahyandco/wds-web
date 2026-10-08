@@ -66,6 +66,34 @@ export interface InstallImages {
   images: WdsRecord[]
 }
 
+/** A group or account allowed to sign in, as configured, and whether Windows could find it. */
+export interface AllowedAccount {
+  name: string
+  kind: 'group' | 'user'
+  /** Why it can't be used (it doesn't exist, or the lookup failed); null when it can. */
+  problem: string | null
+  resolved: boolean
+}
+
+/** How this console is set up: what it manages, as whom, and who may use it. */
+export interface ConsoleInfo {
+  version: string
+  mode: 'local' | 'remote'
+  server: string
+  consoleHost: string
+  /** The account the WDS server sees the console as. */
+  connectsAs: string
+  serviceAccount: string
+  settingsFile: string
+  settingsFileExists: boolean
+  stagingPath: string
+  stagingAccess: string
+  signInRequired: boolean
+  allowedAccounts: AllowedAccount[]
+  /** A TimeSpan, e.g. 08:00:00. */
+  sessionLifetime: string
+}
+
 /** An install image's unattend file, which Windows Setup reads when it installs the image. */
 export interface ImageUnattend {
   present: boolean
@@ -278,13 +306,48 @@ export interface BootSession {
   bootImage: string | null
   transfers: TftpTransfer[]
   notes: BootNote[]
+  /** The install that followed, when WDS client logging is on. */
+  deployment: Deployment | null
 }
 
-/** Something that happened later in a boot, after the boot image loaded. */
+/** Something WDS logged about a boot besides its downloads. */
 export interface BootNote {
   time: string
-  /** unattendBlocked: WDS refused Windows Setup's request for the WDS client unattend file. */
-  kind: 'unattendBlocked'
+  /**
+   * unattendBlocked: WDS refused Windows Setup's request for the WDS client unattend file.
+   * notRecognized: WDS ignored the PXE request, as it answers only prestaged clients.
+   */
+  kind: 'unattendBlocked' | 'notRecognized'
+}
+
+export type DeploymentStage = 'started' | 'imageSelected' | 'transferring' | 'applying' | 'finishing' | 'finished' | 'failed'
+
+export interface DeploymentNote {
+  time: string
+  level: 'info' | 'warning' | 'error'
+  text: string
+}
+
+/** An install, as the WDS client reported it. */
+export interface Deployment {
+  stage: DeploymentStage
+  startedAt: string
+  lastSeen: string
+  clientVersion: string | null
+  winPeVersion: string | null
+  imageGroup: string | null
+  imageName: string | null
+  imageLanguage: string | null
+  imageArchitecture: string | null
+  userName: string | null
+  multicastNamespace: string | null
+  transferStartedAt: string | null
+  transferFinishedAt: string | null
+  applyStartedAt: string | null
+  applyFinishedAt: string | null
+  finishedAt: string | null
+  error: string | null
+  timeline: DeploymentNote[]
 }
 
 export interface ActivityResponse {

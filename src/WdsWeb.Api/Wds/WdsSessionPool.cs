@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 
 namespace WdsWeb.Api.Wds;
@@ -129,8 +131,17 @@ public sealed class WdsSessionPool : IDisposable
         var path = Environment.ExpandEnvironmentVariables(_options.CredentialFile);
         if (!File.Exists(path))
             throw new WdsConnectionException(
-                $"The credential file {path} doesn't exist. Create it with: Get-Credential | Export-Clixml \"{path}\"");
-        return CliXmlCredential.Load(path);
+                $"The credential file {path} doesn't exist. Run Install-WdsWeb.ps1 -Credential (Get-Credential) to save one, " +
+                "or remove Wds:CredentialFile to connect as the service's own account.");
+        try
+        {
+            return StoredCredential.Load(path);
+        }
+        catch (Exception ex) when (ex is CryptographicException or InvalidDataException or JsonException or FormatException)
+        {
+            throw new WdsConnectionException(
+                $"Couldn't read the credential in {path}: {ex.Message} Save it again with Install-WdsWeb.ps1 -Credential (Get-Credential).", ex);
+        }
     }
 
     private static bool IsUsable(Runspace runspace) =>

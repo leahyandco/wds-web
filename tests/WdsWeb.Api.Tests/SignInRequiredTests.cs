@@ -43,6 +43,8 @@ public sealed class SignInRequiredTests(SignInRequiredTests.ProductionApp app) :
     [InlineData("PUT", "/api/boot-images/properties")]
     [InlineData("PUT", "/api/install-images/properties")]
     [InlineData("GET", "/api/install-images/unattend?name=Windows")]
+    [InlineData("PUT", "/api/server/hands-free")]
+    [InlineData("GET", "/api/console")]
     public async Task Refuses_anonymous_requests(string method, string path)
     {
         var response = await _client.SendAsync(new HttpRequestMessage(new HttpMethod(method), path) { Content = JsonContent.Create(new { }) });

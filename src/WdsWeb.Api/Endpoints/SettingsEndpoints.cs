@@ -24,5 +24,12 @@ public static class SettingsEndpoints
 
         app.MapPost("/api/server/restart", (WdsScriptRunner wds, CancellationToken ct) =>
             wds.RunAsync("Restart-WdsService", retryOnBrokenSession: false, timeout: TimeSpan.FromMinutes(3), ct: ct));
+
+        // The CVE-2026-0386 override, a registry value rather than a WDSUTIL setting.
+        app.MapPut("/api/server/hands-free", (HandsFreeSetting request, WdsScriptRunner wds, CancellationToken ct) =>
+            wds.RunAsync("Set-WdsHandsFree", new Dictionary<string, object?> { ["Allow"] = request.Allow }, retryOnBrokenSession: false, ct: ct));
     }
 }
+
+/// <param name="Allow">True lets clients fetch the WDS client unattend file without authenticating (insecure).</param>
+public sealed record HandsFreeSetting(bool Allow);

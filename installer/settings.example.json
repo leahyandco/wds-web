@@ -1,0 +1,30 @@
+{
+  "Wds": {
+    "Mode": "Remote",
+    "ComputerName": "wds01",
+    "CredentialFile": "C:\\ProgramData\\WdsWeb\\credential.json",
+    "UseSsl": false,
+    "StagingPath": "C:\\WdsWeb\\Staging",
+    "StagingShare": "",
+    "ImageSearchPaths": [
+      "C:\\ISO",
+      "C:\\Users\\*\\Downloads"
+    ],
+    "PoolSize": 3,
+    "CommandTimeout": "00:02:00",
+    "JobTimeout": "03:00:00"
+  },
+  "Auth": {
+    "AllowedGroups": [
+      "CONTOSO\\WDS Admins"
+    ],
+    "AllowedUsers": [
+      "CONTOSO\\jdoe"
+    ],
+    "SessionLifetime": "08:00:00"
+  },
+  "Https": {
+    "Port": 8443,
+    "CertificateThumbprint": "0123456789ABCDEF0123456789ABCDEF01234567"
+  }
+}

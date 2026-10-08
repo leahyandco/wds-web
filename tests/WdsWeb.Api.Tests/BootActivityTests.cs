@@ -12,7 +12,7 @@ public class BootActivityTests
     [Fact]
     public void Groups_a_real_UEFI_boot_into_one_session()
     {
-        // The sequence WDS01 logged when a UEFI client booted Windows 11 25H2 over PXE.
+        // The sequence a WDS server logged when a UEFI client booted Windows 11 25H2 over PXE.
         var events = new[]
         {
             Transfer(0, BootActivity.TftpStarted, @"boot\x64\wdsmgfw.efi"),
@@ -120,7 +120,7 @@ public class BootActivityTests
     [Fact]
     public void Adds_a_refused_unattend_request_to_the_boot_that_loaded_the_image()
     {
-        // As on WDS01 on 3 October: the image loads, then Setup's unattend request is refused.
+        // As a WDS server logged it: the image loads, then Setup's unattend request is refused.
         var events = new[]
         {
             Pxe(0),
@@ -142,7 +142,94 @@ public class BootActivityTests
         var session = Assert.Single(BootActivity.Build([UnattendRefused(0)], T0.AddMinutes(1)));
 
         Assert.Single(session.Notes);
+        // Setup only asks once WinPE is running, so the boot image must have loaded.
+        Assert.Equal(BootStatus.Loaded, session.Status);
+    }
+
+    [Fact]
+    public void Follows_an_install_through_the_wds_client_events()
+    {
+        // WinPE got a different address from the PXE boot, so the session is found by MAC address.
+        const string winPeIp = "192.0.2.77";
+        var events = new[]
+        {
+            Pxe(0),
+            Transfer(5, BootActivity.TftpStarted, Image),
+            Transfer(20, BootActivity.TftpCompleted, Image),
+            Client(60, DeploymentEvents.ClientStarted, winPeIp, ("ClientVersion", "10.0.26100.1"), ("WinPEVersion", "10.0.26100.1")),
+            Client(120, DeploymentEvents.ImageSelectedWithDetails, winPeIp, ("ImageGroup", "Windows 11"), ("ImageName", "Windows 11 Pro"),
+                ("ImageLanguage", "en-US"), ("ImageArch", "x64"), ("FullUserName", @"CONTOSO\jdoe")),
+            Client(125, DeploymentEvents.TransferStarted, winPeIp),
+            Client(130, DeploymentEvents.ApplyStarted, winPeIp),
+            // A long quiet apply: more than the usual half-hour gap.
+            Client(130 + 50 * 60, DeploymentEvents.ApplyEnded, winPeIp),
+            Client(131 + 50 * 60, DeploymentEvents.TransferEnded, winPeIp),
+            Client(140 + 50 * 60, DeploymentEvents.ClientEnded, winPeIp),
+        };
+
+        var session = Assert.Single(BootActivity.Build(events, T0.AddHours(2)));
+
+        var deployment = Assert.IsType<Deployment>(session.Deployment);
+        Assert.Equal(DeploymentStage.Finished, deployment.Stage);
+        Assert.Equal(("Windows 11", "Windows 11 Pro", @"CONTOSO\jdoe"), (deployment.ImageGroup, deployment.ImageName, deployment.UserName));
+        Assert.Equal(T0.AddSeconds(130), deployment.ApplyStartedAt);
+        Assert.Equal(T0.AddSeconds(140 + 50 * 60), deployment.FinishedAt);
+        Assert.Equal(7, deployment.Timeline.Count);
+        Assert.Equal(Ip, session.ClientIp);
+    }
+
+    [Fact]
+    public void A_fatal_error_fails_the_install_and_says_why()
+    {
+        var events = new[]
+        {
+            Client(0, DeploymentEvents.ClientStarted, Ip),
+            Client(30, DeploymentEvents.FatalError, Ip, ("ErrorMessage", "Windows cannot find the disk to install to.")),
+            Client(31, DeploymentEvents.ClientEnded, Ip),
+        };
+
+        var deployment = Assert.IsType<Deployment>(Assert.Single(BootActivity.Build(events, T0.AddMinutes(5))).Deployment);
+
+        Assert.Equal(DeploymentStage.Failed, deployment.Stage);
+        Assert.Equal("Windows cannot find the disk to install to.", deployment.Error);
+    }
+
+    [Fact]
+    public void Shows_driver_errors_in_hex()
+    {
+        var events = new[]
+        {
+            Client(0, DeploymentEvents.ClientStarted, Ip),
+            Client(5, DeploymentEvents.DriverInjectionFailed, Ip, ("DriverPackageName", "e1d68x64.inf"), ("ErrorCode", "-2147024891")),
+        };
+
+        var deployment = Assert.IsType<Deployment>(Assert.Single(BootActivity.Build(events, T0.AddMinutes(5))).Deployment);
+
+        Assert.Contains(deployment.Timeline, note => note.Level == "warning" && note.Text.Contains("e1d68x64.inf (error 0x80070005)"));
+    }
+
+    [Fact]
+    public void Notes_a_client_wds_ignored_for_not_being_prestaged()
+    {
+        var ignored = new WdsEventRecord(T0, BootActivity.NotRecognized, new Dictionary<string, string>
+        {
+            ["ClientHardwareAddress"] = Mac,
+            ["ClientIP"] = Ip,
+            ["ClientPrestaged"] = "false",
+        });
+
+        var session = Assert.Single(BootActivity.Build([ignored, ignored with { Time = T0.AddSeconds(4) }], T0.AddMinutes(1)));
+
+        Assert.Equal(BootNoteKind.NotRecognized, Assert.Single(session.Notes).Kind);
         Assert.Equal(BootStatus.PxeOnly, session.Status);
+    }
+
+    // A WDS client event as client logging records it: the MAC address with every event.
+    private static WdsEventRecord Client(int seconds, int id, string ip, params (string Name, string Value)[] fields)
+    {
+        var data = new Dictionary<string, string> { ["SessionGUID"] = "{0A1B2C3D-0000-0000-0000-000000000001}", ["ClientMAC"] = Mac, ["ClientIP"] = ip };
+        foreach (var (name, value) in fields) data[name] = value;
+        return new WdsEventRecord(T0.AddSeconds(seconds), id, data);
     }
 
     private static WdsEventRecord UnattendRefused(int seconds) =>
