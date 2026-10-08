@@ -11,13 +11,18 @@ namespace WdsWeb.Api.Wds;
 /// <param name="PxePromptPolicy">OptIn, OptOut, NoPrompt or Abort. Null or "" follows the server's policy for known clients.</param>
 /// <param name="BootImagePath">Relative to RemoteInstall, e.g. Boot\x64\Images\boot.wim. Null or "" lets the client choose.</param>
 /// <param name="WdsClientUnattend">Relative to RemoteInstall, e.g. WdsClientUnattend\x64.xml. Null or "" uses the server's.</param>
+/// <param name="JoinDomain">
+/// Whether the WDS client joins the computer to the domain under this name. Null leaves WDS's default, yes,
+/// which on a standalone server only ends the install with a failed join (event 4113).
+/// </param>
 public sealed record NewDevice(
     string Name,
     string DeviceId,
     string? Group = null,
     string? PxePromptPolicy = null,
     string? BootImagePath = null,
-    string? WdsClientUnattend = null);
+    string? WdsClientUnattend = null,
+    bool? JoinDomain = null);
 
 /// <summary>Changes to a prestaged device. Null leaves a value as it is; "" clears it.</summary>
 /// <param name="PxePromptPolicy">"" goes back to the server's policy for known clients.</param>
@@ -26,10 +31,11 @@ public sealed record DeviceChanges(
     string? Group = null,
     string? PxePromptPolicy = null,
     string? BootImagePath = null,
-    string? WdsClientUnattend = null);
+    string? WdsClientUnattend = null,
+    bool? JoinDomain = null);
 
 /// <summary>What to give a device when approving its request. Anything left out follows the server's settings.</summary>
-public sealed record DeviceApproval(string? Name = null, string? BootImagePath = null, string? WdsClientUnattend = null);
+public sealed record DeviceApproval(string? Name = null, string? BootImagePath = null, string? WdsClientUnattend = null, bool? JoinDomain = null);
 
 /// <summary>Builds the WDSUTIL commands that prestage, change and remove devices, and answer requests.</summary>
 public static partial class WdsDeviceCommands
@@ -43,6 +49,7 @@ public static partial class WdsDeviceCommands
         if (!string.IsNullOrWhiteSpace(device.PxePromptPolicy)) command.Add($"/PxePromptPolicy:{Prompt(device.PxePromptPolicy)}");
         if (!string.IsNullOrWhiteSpace(device.BootImagePath)) command.Add($"/BootImagePath:{BootImage(device.BootImagePath)}");
         if (!string.IsNullOrWhiteSpace(device.WdsClientUnattend)) command.Add($"/WdsClientUnattend:{Unattend(device.WdsClientUnattend)}");
+        if (device.JoinDomain is { } join) command.Add(JoinDomain(join));
         return [.. command];
     }
 
@@ -55,6 +62,7 @@ public static partial class WdsDeviceCommands
         if (changes.PxePromptPolicy is not null) command.Add($"/PxePromptPolicy:{OrClear(changes.PxePromptPolicy, Prompt)}");
         if (changes.BootImagePath is not null) command.Add($"/BootImagePath:{OrClear(changes.BootImagePath, BootImage)}");
         if (changes.WdsClientUnattend is not null) command.Add($"/WdsClientUnattend:{OrClear(changes.WdsClientUnattend, Unattend)}");
+        if (changes.JoinDomain is { } join) command.Add(JoinDomain(join));
         if (command.Count == 2) throw new InvalidRequestException("There's nothing to change.");
         return [.. command];
     }
@@ -68,6 +76,7 @@ public static partial class WdsDeviceCommands
         if (!string.IsNullOrWhiteSpace(approval.Name)) command.Add($"/MachineName:{Name(approval.Name)}");
         if (!string.IsNullOrWhiteSpace(approval.BootImagePath)) command.Add($"/BootImagePath:{BootImage(approval.BootImagePath)}");
         if (!string.IsNullOrWhiteSpace(approval.WdsClientUnattend)) command.Add($"/WdsClientUnattend:{Unattend(approval.WdsClientUnattend)}");
+        if (approval.JoinDomain is { } join) command.Add(JoinDomain(join));
         return [.. command];
     }
 
@@ -123,6 +132,8 @@ public static partial class WdsDeviceCommands
         var path = value.Trim();
         return RemoteInstallPath.IsUnattendFile(path) ? path : throw new InvalidRequestException($"{value} isn't an .xml file under RemoteInstall.");
     }
+
+    private static string JoinDomain(bool join) => join ? "/JoinDomain:Yes" : "/JoinDomain:No";
 
     private static string RequestId(uint id) =>
         id > 0 ? id.ToString(CultureInfo.InvariantCulture) : throw new InvalidRequestException("Say which request to answer.");

@@ -8,10 +8,16 @@ public sealed record WdsEventRecord(DateTimeOffset Time, int Id, IReadOnlyDictio
 
 public enum BootStatus
 {
-    /// <summary>The client asked for a boot program but never fetched one (e.g. F12 not pressed).</summary>
+    /// <summary>The client asked WDS to PXE boot but downloaded nothing from it.</summary>
     PxeOnly,
 
-    /// <summary>The client loaded the WDS boot manager but hasn't fetched a boot image (yet).</summary>
+    /// <summary>
+    /// The client ran WDS's boot program and went no further: usually its network boot prompt (F12, or
+    /// Enter on UEFI) wasn't answered, or it's waiting for approval.
+    /// </summary>
+    BootProgram,
+
+    /// <summary>The client got as far as the boot menu but hasn't started a boot image (yet).</summary>
     BootMenu,
 
     Downloading,
@@ -21,7 +27,7 @@ public enum BootStatus
 
     Failed,
 
-    /// <summary>A boot image download started long ago and never reported finishing.</summary>
+    /// <summary>A boot image download never finished: it stopped long ago, or the client has booted again since.</summary>
     Incomplete,
 }
 
@@ -65,8 +71,10 @@ public sealed record BootSession(
 /// <summary>
 /// Pieces WDS's PXE (4096) and TFTP (4099 started, 4100 completed, 4101 failed) events into
 /// per-client boot sessions. WDS logs the PXE request more than once per boot (before and after the
-/// F12 prompt), and the TFTP events carry only the client's IP, so events are grouped by IP, and a
-/// new session starts after a quiet gap or when the client PXE-boots again after loading an image.
+/// network boot prompt), and the TFTP events carry only the client's IP, so events are grouped by IP.
+/// A new session starts after a quiet gap, or when the client boots again once it had got past WDS's
+/// boot program: a PXE request, or a fresh download of the boot program, which firmware can fetch again
+/// without WDS logging another request. Until then, repeated tries at the prompt count as one boot.
 /// The image server's refusals of unattend requests (WDSIMGSRV 270) also carry only the IP, and are
 /// added to the session they belong to. With WDS client logging on, the WDS client's own events
 /// (see <see cref="DeploymentEvents"/>) follow the install; they carry the MAC address too, which
@@ -83,6 +91,9 @@ public static partial class BootActivity
 
     private static readonly TimeSpan SessionGap = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan StalledAfter = TimeSpan.FromMinutes(15);
+
+    /// <summary>How far back a TFTP finish looks for its start: far longer than any boot image takes.</summary>
+    private static readonly TimeSpan LongestDownload = TimeSpan.FromHours(2);
 
     /// <summary>Applying a big image can leave the WDS client quiet for a long time.</summary>
     private static readonly TimeSpan DeploymentGap = TimeSpan.FromHours(6);
@@ -119,36 +130,45 @@ public static partial class BootActivity
             {
                 case PxeBoot or NotRecognized:
                     var mac = record.Data.GetValueOrDefault("ClientHardwareAddress");
-                    if (session is null || record.Time - session.LastSeen > SessionGap || session.LoadedImage ||
-                        (session.MacAddress is not null && mac is not null && MacKey(mac) != MacKey(session.MacAddress)))
+                    bool? prestaged = bool.TryParse(record.Data.GetValueOrDefault("ClientPrestaged"), out var known) ? known : null;
+                    if (session is null || record.Time - session.LastSeen > SessionGap || session.Progressed ||
+                        (session.MacAddress is not null && mac is not null && MacKey(mac) != MacKey(session.MacAddress)) ||
+                        // Prestaged (or removed) since its last try, so WDS answers it differently now.
+                        (session.Prestaged is not null && prestaged is not null && session.Prestaged != prestaged))
                     {
                         session = Start(ip, record.Time);
                     }
                     session.MacAddress ??= mac;
                     session.DeviceId ??= record.Data.GetValueOrDefault("ClientDeviceID");
                     session.ArchitectureCode ??= ParseInt(record.Data.GetValueOrDefault("ClientArch"));
-                    session.Prestaged ??= bool.TryParse(record.Data.GetValueOrDefault("ClientPrestaged"), out var prestaged) ? prestaged : null;
+                    session.Prestaged ??= prestaged;
                     if (record.Id == NotRecognized && session.Notes.All(n => n.Kind != BootNoteKind.NotRecognized))
                         session.Notes.Add(new BootNote(record.Time, BootNoteKind.NotRecognized));
                     Remember(session);
                     break;
 
                 case TftpStarted:
+                    var file = record.Data.GetValueOrDefault("FileName") ?? "";
                     if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(ip, record.Time);
-                    session.Transfers.Add(new Transfer(record.Data.GetValueOrDefault("FileName") ?? "", ParseLong(record.Data.GetValueOrDefault("FileSize")), record.Time));
+                    else if (session.Progressed && FirstBootProgram().IsMatch(file)) session = Start(ip, record.Time, sameClientAs: session);
+                    session.Transfers.Add(new Transfer(file, ParseLong(record.Data.GetValueOrDefault("FileSize")), record.Time));
                     break;
 
                 case TftpCompleted or TftpFailed:
-                    if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(ip, record.Time);
                     var fileName = record.Data.GetValueOrDefault("FileName") ?? "";
-                    // The start may have scrolled out of the log; then record the finish on its own.
-                    var transfer = session.Transfers.LastOrDefault(t => t.FinishedAt is null && t.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
-                    if (transfer is null)
+                    var (owner, transfer) = Unfinished(ip, fileName, record.Time);
+                    if (owner is not null)
                     {
+                        session = owner;
+                    }
+                    else
+                    {
+                        if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(ip, record.Time);
+                        // The start scrolled out of the log; record the finish on its own.
                         transfer = new Transfer(fileName, ParseLong(record.Data.GetValueOrDefault("FileSize")), null);
                         session.Transfers.Add(transfer);
                     }
-                    transfer.FinishedAt = record.Time;
+                    transfer!.FinishedAt = record.Time;
                     transfer.Succeeded = record.Id == TftpCompleted;
                     transfer.ErrorCode = record.Data.GetValueOrDefault("ErrorCode");
                     break;
@@ -166,11 +186,22 @@ public static partial class BootActivity
             session.LastSeen = record.Time;
         }
 
-        return sessions.OrderByDescending(s => s.LastSeen).Select(s => s.Build(now)).ToList();
+        // Newest boot first, by when it began: a late event, such as a failure logged for a download cut short,
+        // doesn't move an old boot up the list.
+        return sessions.OrderByDescending(s => s.FirstSeen).Select(s => s.Build(now)).ToList();
 
-        Session Start(string ip, DateTimeOffset time)
+        // sameClientAs: the session this boot follows on from moments later, when the new boot's own PXE
+        // request (which says who the client is) wasn't logged.
+        Session Start(string ip, DateTimeOffset time, Session? sameClientAs = null)
         {
-            var session = new Session(ip, time);
+            // Whatever the client was doing at this address before, it has stopped.
+            if (byIp.TryGetValue(ip, out var previous)) previous.Superseded = true;
+            var session = new Session(ip, time)
+            {
+                MacAddress = sameClientAs?.MacAddress,
+                DeviceId = sameClientAs?.DeviceId,
+                ArchitectureCode = sameClientAs?.ArchitectureCode,
+            };
             sessions.Add(session);
             byIp[ip] = session;
             return session;
@@ -179,6 +210,21 @@ public static partial class BootActivity
         void Remember(Session session)
         {
             if (MacKey(session.MacAddress) is { } key) byMac[key] = session;
+        }
+
+        // The download a TFTP finish belongs to: usually in the client's current session, but if the client
+        // was reset mid-download and has booted again since, in the one before.
+        (Session?, Transfer?) Unfinished(string ip, string fileName, DateTimeOffset finished)
+        {
+            foreach (var candidate in Enumerable.Reverse(sessions))
+            {
+                if (finished - candidate.FirstSeen > LongestDownload) break;
+                if (!candidate.ClientIp.Equals(ip, StringComparison.OrdinalIgnoreCase)) continue;
+                var transfer = candidate.Transfers.LastOrDefault(t =>
+                    t.FinishedAt is null && t.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+                if (transfer is not null) return (candidate, transfer);
+            }
+            return (null, null);
         }
     }
 
@@ -196,11 +242,51 @@ public static partial class BootActivity
     private static long? ParseLong(string? value) =>
         long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) ? number : null;
 
-    // WDS names each client's boot configuration after its architecture, e.g. \Tmp\x64uefi{GUID}.bcd.
-    [GeneratedRegex(@"\\Tmp\\(?<arch>[A-Za-z0-9]+)\{[0-9A-Fa-f-]+\}\.bcd$")]
+    // WDS names each client's boot menu (its BCD) after an architecture, e.g. \Tmp\x64uefi{GUID}.bcd, though
+    // not always with the firmware: a prestaged device's can be \Tmp\x64{GUID}.bcd.
+    [GeneratedRegex(@"\\Tmp\\(?<arch>x86|x64|arm64|arm|ia64)(?<uefi>uefi)?\{[0-9A-Fa-f-]+\}\.bcd$", RegexOptions.IgnoreCase)]
     private static partial Regex ClientBcd();
 
+    // What a client fetches first from WDS: wdsnbp.com and pxeboot (BIOS), wdsmgfw.efi (UEFI), which show
+    // the network boot prompt, or abortpxe.com.
+    [GeneratedRegex(@"(?:^|\\)(?:wdsnbp\.com|pxeboot\.com|pxeboot\.n12|wdsmgfw\.efi|abortpxe\.com)$", RegexOptions.IgnoreCase)]
+    private static partial Regex FirstBootProgram();
+
+    // Boot programs and boot managers live in boot\<architecture>; .efi files are for UEFI, the rest for BIOS.
+    [GeneratedRegex(@"^\\?boot\\(?<arch>x86|x64|arm64|arm|ia64)\\[^\\]+\.(?<ext>efi|com|n12|exe)$", RegexOptions.IgnoreCase)]
+    private static partial Regex BootFile();
+
+    // The Windows boot manager, which WDS's boot program hands over to once the prompt is answered.
+    [GeneratedRegex(@"(?:^|\\)(?:bootmgfw\.efi|bootmgr\.exe)$", RegexOptions.IgnoreCase)]
+    private static partial Regex BootManager();
+
     private static bool IsBootImage(string fileName) => fileName.EndsWith(".wim", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The boot menu, or the RAM disk that comes with a boot image: the client got past the prompt.</summary>
+    private static bool IsPastBootProgram(string fileName) =>
+        IsBootImage(fileName) || ClientBcd().IsMatch(fileName) || fileName.EndsWith("\\Boot.SDI", StringComparison.OrdinalIgnoreCase);
+
+    private static string ArchitectureName(string arch) => arch.ToLowerInvariant() switch
+    {
+        "arm" => "ARM",
+        "arm64" => "ARM64",
+        "ia64" => "Itanium",
+        var other => other,
+    };
+
+    /// <summary>The client's architecture and firmware, such as "x64 UEFI", from the files it fetched.</summary>
+    private static string? ArchitectureOf(IReadOnlyList<Transfer> transfers)
+    {
+        // The last boot file says the most: BIOS clients start with boot\x86\wdsnbp.com whatever they are.
+        if (transfers.Select(t => BootFile().Match(t.FileName)).LastOrDefault(m => m.Success) is { } boot)
+        {
+            var firmware = boot.Groups["ext"].Value.Equals("efi", StringComparison.OrdinalIgnoreCase) ? "UEFI" : "BIOS";
+            return $"{ArchitectureName(boot.Groups["arch"].Value)} {firmware}";
+        }
+        if (transfers.Select(t => ClientBcd().Match(t.FileName)).FirstOrDefault(m => m.Success) is { } bcd)
+            return ArchitectureName(bcd.Groups["arch"].Value) + (bcd.Groups["uefi"].Success ? " UEFI" : "");
+        return null;
+    }
 
     private sealed class Transfer(string fileName, long? fileSize, DateTimeOffset? startedAt)
     {
@@ -227,32 +313,40 @@ public static partial class BootActivity
         public List<BootNote> Notes { get; } = [];
         public DeploymentBuilder? Deployment { get; set; }
 
+        /// <summary>A later session from the same address has started, so nothing here is still going.</summary>
+        public bool Superseded { get; set; }
+
         /// <summary>WinPE is (or was) running: the boot image downloaded, or Setup has been heard from since.</summary>
         public bool LoadedImage =>
             Transfers.Any(t => IsBootImage(t.FileName) && t.Succeeded == true) ||
             Deployment is not null ||
             Notes.Any(n => n.Kind == BootNoteKind.UnattendBlocked);
 
+        /// <summary>Got past WDS's boot program, so a PXE request from now on is the client booting again.</summary>
+        public bool Progressed => LoadedImage || Transfers.Any(t => IsPastBootProgram(t.FileName));
+
         public BootSession Build(DateTimeOffset now)
         {
             var image = Transfers.LastOrDefault(t => IsBootImage(t.FileName));
-            var architecture = Transfers
-                .Select(t => ClientBcd().Match(t.FileName))
-                .FirstOrDefault(m => m.Success)?.Groups["arch"].Value;
 
             return new BootSession(
-                ClientIp, MacAddress, DeviceId, architecture, ArchitectureCode, Prestaged, FirstSeen, LastSeen,
+                ClientIp, MacAddress, DeviceId, ArchitectureOf(Transfers), ArchitectureCode, Prestaged, FirstSeen, LastSeen,
                 StatusOf(image, now), image?.FileName, Transfers.Select(t => t.Build()).ToList(), Notes, Deployment?.Build());
         }
 
         private BootStatus StatusOf(Transfer? image, DateTimeOffset now)
         {
-            if (Transfers.Any(t => t.Succeeded == false)) return BootStatus.Failed;
             // The download may have scrolled out of the log, but Setup only runs once WinPE has loaded.
-            if (image is null && LoadedImage) return BootStatus.Loaded;
-            if (image is null) return Transfers.Count > 0 ? BootStatus.BootMenu : BootStatus.PxeOnly;
-            if (image.Succeeded == true) return BootStatus.Loaded;
-            return now - LastSeen > StalledAfter ? BootStatus.Incomplete : BootStatus.Downloading;
+            if (image?.Succeeded == true || (image is null && LoadedImage)) return BootStatus.Loaded;
+            if (Transfers.Any(t => t.Succeeded == false)) return BootStatus.Failed;
+            if (image is null)
+            {
+                return Transfers.Any(t => ClientBcd().IsMatch(t.FileName) || BootManager().IsMatch(t.FileName)) ? BootStatus.BootMenu
+                    : Transfers.Count > 0 ? BootStatus.BootProgram
+                    : BootStatus.PxeOnly;
+            }
+            // A reset or power-off mid-download logs no failure: the download just never finishes.
+            return Superseded || now - LastSeen > StalledAfter ? BootStatus.Incomplete : BootStatus.Downloading;
         }
     }
 }

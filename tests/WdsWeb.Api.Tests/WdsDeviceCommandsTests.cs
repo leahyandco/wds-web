@@ -19,6 +19,22 @@ public class WdsDeviceCommandsTests
             WdsDeviceCommands.Add(new NewDevice("PC-02", "00005E005302", "Bench 2", "noprompt", @"Boot\x64\Images\boot.wim", @"WdsClientUnattend\x64.xml")));
     }
 
+    [Fact]
+    public void The_domain_join_is_said_only_when_chosen()
+    {
+        // WDS joins prestaged devices to the domain by default, which on a standalone server only fails.
+        Assert.Equal(
+            ["/Add-Device", "/Device:PC-01", "/ID:00-00-5E-00-53-01", "/JoinDomain:No"],
+            WdsDeviceCommands.Add(new NewDevice("PC-01", "00-00-5E-00-53-01", JoinDomain: false)));
+        Assert.Equal(
+            ["/Set-Device", "/Device:PC-01", "/JoinDomain:Yes"],
+            WdsDeviceCommands.Change("PC-01", new DeviceChanges(JoinDomain: true)));
+        Assert.Equal(
+            ["/Approve-AutoAddDevices", "/RequestId:7", "/JoinDomain:No"],
+            WdsDeviceCommands.Approve(7, new DeviceApproval(JoinDomain: false)));
+        Assert.DoesNotContain(WdsDeviceCommands.Approve(7, new DeviceApproval()), a => a.StartsWith("/JoinDomain"));
+    }
+
     [Theory]
     [InlineData("00-00-5E-00-53-01", "00-00-5E-00-53-01")]
     [InlineData("00005e005301", "00-00-5E-00-53-01")]

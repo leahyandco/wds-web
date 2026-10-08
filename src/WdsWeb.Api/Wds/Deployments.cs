@@ -30,6 +30,8 @@ public enum DeploymentStage
 public sealed record DeploymentNote(DateTimeOffset Time, string Level, string Text);
 
 /// <summary>An install, as the WDS client reported it with client logging on.</summary>
+/// <param name="Unicast">The image came straight from the server's share rather than by multicast.</param>
+/// <param name="DomainJoinFailed">The WDS client couldn't join the computer to the domain, as its device asked.</param>
 public sealed record Deployment(
     DeploymentStage Stage,
     DateTimeOffset StartedAt,
@@ -42,12 +44,14 @@ public sealed record Deployment(
     string? ImageArchitecture,
     string? UserName,
     string? MulticastNamespace,
+    bool Unicast,
     DateTimeOffset? TransferStartedAt,
     DateTimeOffset? TransferFinishedAt,
     DateTimeOffset? ApplyStartedAt,
     DateTimeOffset? ApplyFinishedAt,
     DateTimeOffset? FinishedAt,
     string? Error,
+    bool DomainJoinFailed,
     IReadOnlyList<DeploymentNote> Timeline);
 
 /// <summary>
@@ -103,6 +107,7 @@ internal sealed class DeploymentBuilder(DateTimeOffset startedAt)
     private DateTimeOffset _lastSeen = startedAt;
     private string? _clientVersion, _winPeVersion, _imageGroup, _imageName, _imageLanguage, _imageArchitecture, _userName, _multicast, _error;
     private DateTimeOffset? _transferStarted, _transferFinished, _applyStarted, _applyFinished, _finished;
+    private bool _unicast, _domainJoinFailed;
 
     /// <summary>Still going: a long image apply can go quiet for a while, so the session stays open.</summary>
     public bool Active => _stage is not (DeploymentStage.Finished or DeploymentStage.Failed);
@@ -133,7 +138,7 @@ internal sealed class DeploymentBuilder(DateTimeOffset startedAt)
                 _imageGroup = Field("ImageGroup") ?? _imageGroup;
                 _imageName = Field("ImageName") ?? _imageName;
                 _imageLanguage = Field("ImageLanguage") ?? _imageLanguage;
-                _imageArchitecture = Field("ImageArch") ?? _imageArchitecture;
+                _imageArchitecture = ArchitectureName(Field("ImageArch")) ?? _imageArchitecture;
                 _userName = Field("FullUserName") ?? _userName;
                 Advance(DeploymentStage.ImageSelected);
                 Note("info", $"Chose {_imageName ?? "an image"}{(_imageGroup is null ? "" : $" from {_imageGroup}")}{(_userName is null ? "" : $", signed in as {_userName}")}");
@@ -150,7 +155,13 @@ internal sealed class DeploymentBuilder(DateTimeOffset startedAt)
                 Note("info", "Finished downloading the image");
                 break;
             case DeploymentEvents.TransferDowngraded:
-                Note("warning", "The multicast download fell back to a slower one");
+                // Despite the name, WDS logs this (with no namespace) whenever there's no multicast transmission
+                // for the image, and the client installs straight from the server's share: the usual case.
+                _unicast = true;
+                if (Field("MulticastNamespace") is { } namespaceName)
+                    Note("warning", $"Left the multicast transmission {namespaceName} to install straight from the server");
+                else
+                    Note("info", "Installing straight from the server, as there's no multicast transmission for this image");
                 break;
             case DeploymentEvents.ApplyStarted:
                 _applyStarted ??= record.Time;
@@ -176,6 +187,7 @@ internal sealed class DeploymentBuilder(DateTimeOffset startedAt)
                 Note("info", _stage == DeploymentStage.Failed ? "The WDS client stopped" : "The WDS client finished; Windows Setup carries on after the restart");
                 break;
             case DeploymentEvents.DomainJoinError:
+                _domainJoinFailed = true;
                 _error = $"Couldn't join {Field("MachineName") ?? "the computer"} to the domain{Code(Field("ErrorCode"))}";
                 Note("error", _error);
                 break;
@@ -222,11 +234,22 @@ internal sealed class DeploymentBuilder(DateTimeOffset startedAt)
 
     public Deployment Build() => new(
         _stage, _startedAt, _lastSeen, _clientVersion, _winPeVersion, _imageGroup, _imageName, _imageLanguage, _imageArchitecture,
-        _userName, _multicast, _transferStarted, _transferFinished, _applyStarted, _applyFinished, _finished, _error,
+        _userName, _multicast, _unicast, _transferStarted, _transferFinished, _applyStarted, _applyFinished, _finished, _error, _domainJoinFailed,
         _timeline.OrderBy(n => n.Time).ToList());
 
     private static string Code(string? errorCode) =>
         errorCode is null ? "" : $" (error {FormatCode(errorCode)})";
+
+    // WDS logs the image's architecture as Windows' processor architecture number.
+    private static string? ArchitectureName(string? code) => code switch
+    {
+        "0" => "x86",
+        "5" => "ARM",
+        "6" => "Itanium",
+        "9" => "x64",
+        "12" => "ARM64",
+        _ => code,
+    };
 
     // WDS logs error codes as decimal; Windows people know them as hex (0x80070005).
     private static string FormatCode(string code) =>

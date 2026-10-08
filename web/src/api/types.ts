@@ -116,6 +116,8 @@ export interface DeviceSettings {
   pxePromptPolicy?: string | null
   bootImagePath?: string | null
   wdsClientUnattend?: string | null
+  /** Whether the WDS client joins the computer to the domain under the device's name. */
+  joinDomain?: boolean | null
 }
 
 export interface NewDevice extends DeviceSettings {
@@ -132,6 +134,7 @@ export interface DeviceApproval {
   name?: string | null
   bootImagePath?: string | null
   wdsClientUnattend?: string | null
+  joinDomain?: boolean | null
 }
 
 export interface DriverPackage {
@@ -279,7 +282,7 @@ export interface EventsResponse {
   warnings: string[]
 }
 
-export type BootStatus = 'pxeOnly' | 'bootMenu' | 'downloading' | 'loaded' | 'failed' | 'incomplete'
+export type BootStatus = 'pxeOnly' | 'bootProgram' | 'bootMenu' | 'downloading' | 'loaded' | 'failed' | 'incomplete'
 
 export interface TftpTransfer {
   fileName: string
@@ -295,7 +298,7 @@ export interface BootSession {
   clientIp: string
   macAddress: string | null
   deviceId: string | null
-  /** WDS's own name for the client's architecture (e.g. x64uefi), when it served the client a BCD. */
+  /** The client's architecture and firmware, such as "x64 UEFI", from the files it fetched. */
   architecture: string | null
   /** The architecture number from the PXE event, whose meaning WDS doesn't document. */
   architectureCode: number | null
@@ -341,12 +344,16 @@ export interface Deployment {
   imageArchitecture: string | null
   userName: string | null
   multicastNamespace: string | null
+  /** The image came straight from the server's share rather than by multicast. */
+  unicast: boolean
   transferStartedAt: string | null
   transferFinishedAt: string | null
   applyStartedAt: string | null
   applyFinishedAt: string | null
   finishedAt: string | null
   error: string | null
+  /** The WDS client couldn't join the computer to the domain, as its device asked. */
+  domainJoinFailed: boolean
   timeline: DeploymentNote[]
 }
 

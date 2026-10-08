@@ -2,8 +2,8 @@ import { Alert, Anchor, Badge, Button, Card, Code, Drawer, Group, SegmentedContr
 import { IconAlertTriangle, IconDeviceDesktopPlus, IconInfoCircle } from '@tabler/icons-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { useActivity, useServerConfig } from '../api/queries'
-import type { BootSession, Deployment, TftpTransfer } from '../api/types'
+import { useActivity, useDevices, useServerConfig } from '../api/queries'
+import type { BootSession, Deployment, TftpTransfer, WdsRecord } from '../api/types'
 import { BootStatusBadge } from '../components/BootStatusBadge'
 import { DeploymentStageBadge } from '../components/DeploymentStageBadge'
 import { DeviceEditor } from '../components/DeviceEditor'
@@ -26,7 +26,11 @@ export function ActivityPage() {
   const [prestaging, setPrestaging] = useState<BootSession | null>(null)
   const query = useActivity(Number(hours))
   const config = useServerConfig()
+  const devices = useDevices()
   const clientLogging = config.data ? findValue(config.data.sections, ['WDS Client Policy', 'Logging policy', 'Enabled']) : null
+  const serverUnattend = config.data ? isYes(findValue(config.data.sections, ['WDS Client Policy', 'Unattend policy', 'Enabled'])) : false
+  const standalone = config.data ? isYes(findValue(config.data.sections, ['Server State', 'Standalone configuration'])) : false
+  const unattendExpected = (session: BootSession) => serverUnattend || deviceUnattend(session, devices.data?.prestaged ?? [])
 
   return (
     <>
@@ -64,7 +68,7 @@ export function ActivityPage() {
                   No PXE boots in this period.
                 </Text>
               ) : (
-                <SessionTable sessions={activity.sessions} onSelect={setSelected} />
+                <SessionTable sessions={activity.sessions} unattendExpected={unattendExpected} onSelect={setSelected} />
               )}
             </Card>
           </Stack>
@@ -78,7 +82,14 @@ export function ActivityPage() {
         size="xl"
         title={selected ? `Boot from ${selected.macAddress ?? selected.clientIp}` : undefined}
       >
-        {selected && <SessionDetail session={selected} onPrestage={() => setPrestaging(selected)} />}
+        {selected && (
+          <SessionDetail
+            session={selected}
+            unattendExpected={unattendExpected(selected)}
+            standalone={standalone}
+            onPrestage={() => setPrestaging(selected)}
+          />
+        )}
       </Drawer>
       <DeviceEditor
         opened={prestaging !== null}
@@ -90,7 +101,21 @@ export function ActivityPage() {
   )
 }
 
-function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelect: (session: BootSession) => void }) {
+/** Whether the client's prestaged device has its own WDS client unattend file. */
+function deviceUnattend(session: BootSession, devices: WdsRecord[]) {
+  const hex = (value: unknown) => String(value ?? '').replace(/[^0-9a-f]/gi, '').toUpperCase()
+  const ids = [session.macAddress, session.deviceId].map(hex).filter(Boolean)
+  return devices.some((device) => ids.includes(hex(device.DeviceID)) && String(device.WdsClientUnattend ?? '').trim() !== '')
+}
+
+interface SessionTableProps {
+  sessions: BootSession[]
+  /** Whether WDS would have given the client an unattend file; if not, refusing to changes nothing. */
+  unattendExpected: (session: BootSession) => boolean
+  onSelect: (session: BootSession) => void
+}
+
+function SessionTable({ sessions, unattendExpected, onSelect }: SessionTableProps) {
   return (
     <Table.ScrollContainer minWidth={860}>
       <Table striped highlightOnHover verticalSpacing="sm">
@@ -130,13 +155,13 @@ function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelec
                     {session.clientIp}
                   </Text>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ whiteSpace: 'nowrap' }}>
                   <Text size="sm">{architectureLabel(session)}</Text>
                 </Table.Td>
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
                     <BootStatusBadge status={session.status} />
-                    {session.notes.some((note) => note.kind === 'unattendBlocked') && (
+                    {session.notes.some((note) => note.kind === 'unattendBlocked') && unattendExpected(session) && (
                       <Badge color="orange" variant="light" tt="none">
                         Unattend refused
                       </Badge>
@@ -181,17 +206,20 @@ function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelec
   )
 }
 
-function SessionDetail({ session, onPrestage }: { session: BootSession; onPrestage: () => void }) {
+interface SessionDetailProps {
+  session: BootSession
+  unattendExpected: boolean
+  /** A standalone WDS server has no domain to join devices to. */
+  standalone: boolean
+  onPrestage: () => void
+}
+
+function SessionDetail({ session, unattendExpected, standalone, onPrestage }: SessionDetailProps) {
   const facts: [string, string][] = [
     ['MAC address', session.macAddress ?? EMPTY],
     ['IP address', session.clientIp],
     ['Device ID', session.deviceId ?? EMPTY],
-    [
-      'Architecture',
-      session.architecture
-        ? `${session.architecture}${session.architectureCode != null ? ` (PXE code ${session.architectureCode})` : ''}`
-        : architectureLabel(session),
-    ],
+    ['Architecture', architectureLabel(session)],
     ['Prestaged', session.prestaged == null ? EMPTY : session.prestaged ? 'Yes' : 'No'],
     ['First seen', formatDateTime(session.firstSeen)],
     ['Last seen', formatDateTime(session.lastSeen)],
@@ -207,13 +235,20 @@ function SessionDetail({ session, onPrestage }: { session: BootSession; onPresta
       </Group>
       {session.notes
         .filter((note) => note.kind === 'unattendBlocked')
-        .map((note) => (
-          <Alert key={note.time} color="orange" icon={<IconAlertTriangle />} title="WDS refused the unattend request">
-            At {formatDateTime(note.time)} Windows Setup asked for the WDS client unattend file, and WDS refused: hands-free
-            deployment has been off since the April 2026 update (CVE-2026-0386). So the WDS client asked its questions
-            (language, sign-in, which image) at the machine instead of taking the answers from the file.
-          </Alert>
-        ))}
+        .map((note) =>
+          unattendExpected ? (
+            <Alert key={note.time} color="orange" icon={<IconAlertTriangle />} title="WDS refused the unattend request">
+              At {formatDateTime(note.time)} Windows Setup asked for the WDS client unattend file, and WDS refused: hands-free
+              deployment has been off since the April 2026 update (CVE-2026-0386). So the WDS client asked its questions
+              (language, sign-in, which image) at the machine instead of taking the answers from the file.
+            </Alert>
+          ) : (
+            <Alert key={note.time} color="gray" icon={<IconInfoCircle />}>
+              Windows Setup asked WDS for an unattend file, which WDS refuses since the April 2026 update (CVE-2026-0386). It
+              makes no difference here: WDS has no unattend file to give this client.
+            </Alert>
+          ),
+        )}
       {session.notes.some((note) => note.kind === 'notRecognized') && (
         <Alert color="orange" icon={<IconAlertTriangle />} title="WDS ignored this client">
           It isn't prestaged, and WDS answers only known clients. Prestage it below, or let WDS answer all clients under{' '}
@@ -247,7 +282,7 @@ function SessionDetail({ session, onPrestage }: { session: BootSession; onPresta
         </Table.Tbody>
       </Table>
 
-      {session.deployment && <DeploymentDetail deployment={session.deployment} />}
+      {session.deployment && <DeploymentDetail deployment={session.deployment} standalone={standalone} />}
 
       <div>
         <Title order={5} mb="xs">
@@ -266,7 +301,7 @@ function SessionDetail({ session, onPrestage }: { session: BootSession; onPresta
 }
 
 /** The install as the WDS client reported it: what it chose, how long each part took, and what happened. */
-function DeploymentDetail({ deployment }: { deployment: Deployment }) {
+function DeploymentDetail({ deployment, standalone }: { deployment: Deployment; standalone: boolean }) {
   const active = deployment.stage !== 'finished' && deployment.stage !== 'failed'
   // How long a step took, or for one still going, when it started.
   const took = (from: string | null, to: string | null) =>
@@ -280,7 +315,14 @@ function DeploymentDetail({ deployment }: { deployment: Deployment }) {
   const facts: [string, string][] = [
     ['Image', deployment.imageName ? `${deployment.imageName}${deployment.imageGroup ? ` (${deployment.imageGroup})` : ''}` : EMPTY],
     ...(deployment.userName ? ([['Signed in as', deployment.userName]] as [string, string][]) : []),
-    ['Download', download ? `${download}${deployment.multicastNamespace ? ', by multicast' : ''}` : EMPTY],
+    [
+      'Download',
+      download
+        ? `${download}${deployment.multicastNamespace ? ', by multicast' : ''}`
+        : deployment.unicast
+          ? 'None: installed straight from the server, with no multicast'
+          : EMPTY,
+    ],
     ['Apply', apply ?? EMPTY],
     ['Last heard from', `${formatDateTime(deployment.lastSeen)} (${formatAgo(deployment.lastSeen)})`],
   ]
@@ -297,6 +339,16 @@ function DeploymentDetail({ deployment }: { deployment: Deployment }) {
       {deployment.error && (
         <Alert color="red" icon={<IconAlertTriangle />} mb="sm">
           {deployment.error}
+          {deployment.domainJoinFailed && standalone && (
+            <Text size="sm" mt={4}>
+              This WDS server is standalone, so there's no domain to join. Turn off <i>Join the domain during setup</i> for the
+              device under{' '}
+              <Anchor component={Link} to="/devices" inherit>
+                Devices
+              </Anchor>
+              .
+            </Text>
+          )}
         </Alert>
       )}
       <Table withRowBorders={false} verticalSpacing={4} mb="md">
@@ -315,7 +367,7 @@ function DeploymentDetail({ deployment }: { deployment: Deployment }) {
           ))}
         </Table.Tbody>
       </Table>
-      <Timeline bulletSize={12} lineWidth={2}>
+      <Timeline bulletSize={12} lineWidth={2} active={deployment.timeline.length - 1}>
         {deployment.timeline.map((note, index) => (
           <Timeline.Item key={index} color={note.level === 'error' ? 'red' : note.level === 'warning' ? 'orange' : 'blue'} title={note.text}>
             <Text size="xs" c="dimmed">

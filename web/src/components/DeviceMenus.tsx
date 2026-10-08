@@ -2,10 +2,12 @@ import { ActionIcon, Alert, Button, Group, Loader, Menu, Modal, Select, Stack, T
 import { notifications } from '@mantine/notifications'
 import { IconAlertTriangle, IconCheck, IconDots, IconPencil, IconTrash, IconX } from '@tabler/icons-react'
 import { useState, type ReactNode } from 'react'
-import { useAnswerDeviceRequest, useBootImages, useRemoveDevice } from '../api/queries'
+import { useAnswerDeviceRequest, useBootImages, useRemoveDevice, useServerConfig } from '../api/queries'
 import type { WdsRecord } from '../api/types'
 import { bootImageChoices, isDeviceName } from '../lib/devices'
 import { asNumber } from '../lib/records'
+import { findValue } from '../lib/wdsutil'
+import { JoinDomainSwitch } from './DeviceEditor'
 
 const NONE = '\u0000none'
 
@@ -134,11 +136,13 @@ export function RequestActionsMenu({ request }: { request: WdsRecord }) {
 function ApproveForm({ requestId, label, onDone }: { requestId: number; label: string; onDone: () => void }) {
   const answer = useAnswerDeviceRequest()
   const bootImages = useBootImages()
+  const config = useServerConfig()
   const [name, setName] = useState('')
   const [bootImage, setBootImage] = useState('')
   const [unattend, setUnattend] = useState('')
+  const [joinDomain, setJoinDomain] = useState<boolean | null>(null)
 
-  if (bootImages.isPending) {
+  if (bootImages.isPending || config.isPending) {
     return (
       <Group justify="center" py="xl">
         <Loader />
@@ -146,13 +150,15 @@ function ApproveForm({ requestId, label, onDone }: { requestId: number; label: s
     )
   }
   const images = bootImageChoices(bootImages.data ?? [], '')
+  const standalone = config.data ? findValue(config.data.sections, ['Server State', 'Standalone configuration']) === 'Yes' : false
+  const join = joinDomain ?? !standalone
   const nameProblem = name.trim() && !isDeviceName(name) ? 'Use letters, digits, hyphens and underscores, without spaces.' : null
 
   const approve = async () => {
     try {
       await answer.mutateAsync({
         requestId,
-        approval: { name: name.trim() || null, bootImagePath: bootImage || null, wdsClientUnattend: unattend.trim() || null },
+        approval: { name: name.trim() || null, bootImagePath: bootImage || null, wdsClientUnattend: unattend.trim() || null, joinDomain: join },
       })
       notifications.show({ color: 'green', message: `Approved ${label}. It carries on booting at its next check.` })
       onDone()
@@ -190,6 +196,7 @@ function ApproveForm({ requestId, label, onDone }: { requestId: number; label: s
         placeholder="WdsClientUnattend\x64.xml"
         description="Relative to RemoteInstall."
       />
+      <JoinDomainSwitch checked={join} onChange={setJoinDomain} standalone={standalone} />
       {answer.error && (
         <Alert color="red" icon={<IconAlertTriangle />}>
           {answer.error.message}

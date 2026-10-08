@@ -1,12 +1,13 @@
-import { Alert, Button, Group, Loader, Modal, SegmentedControl, Select, Stack, Text, TextInput } from '@mantine/core'
+import { Alert, Button, Group, Loader, Modal, SegmentedControl, Select, Stack, Switch, Text, TextInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useState } from 'react'
-import { useAddDevice, useBootImages, useChangeDevice } from '../api/queries'
+import { useAddDevice, useBootImages, useChangeDevice, useServerConfig } from '../api/queries'
 import type { DeviceChanges, WdsRecord } from '../api/types'
 import { bootImageChoices, devicePrompt, isDeviceId, isDeviceName, isPlaceholderGuid } from '../lib/devices'
 import { asString } from '../lib/records'
 import { promptOptions, sameText } from '../lib/settings'
+import { findValue } from '../lib/wdsutil'
 
 const NONE = '\u0000none'
 
@@ -24,7 +25,7 @@ interface DeviceEditorProps {
   onClose: () => void
 }
 
-/** Prestages a device, or changes one's ID, group, PXE prompt, boot image and WDS client unattend file. */
+/** Prestages a device, or changes one's ID, group, PXE prompt, boot image, WDS client unattend file and domain join. */
 export function DeviceEditor({ opened, device, seed, onClose }: DeviceEditorProps) {
   return (
     <Modal opened={opened} onClose={onClose} title={device ? `Change ${String(device.DeviceName)}` : 'Prestage a device'} size="lg">
@@ -40,20 +41,44 @@ interface DeviceFormProps {
   onDone: () => void
 }
 
-// The boot image choice starts from the boot image list, so wait for it.
+// The boot image choice starts from the boot image list, and the domain join from the server's mode, so wait for both.
 function DeviceFormLoader(props: DeviceFormProps) {
   const bootImages = useBootImages()
-  if (bootImages.isPending) {
+  const config = useServerConfig()
+  if (bootImages.isPending || config.isPending) {
     return (
       <Group justify="center" py="xl">
         <Loader />
       </Group>
     )
   }
-  return <DeviceForm {...props} bootImages={bootImages.data ?? []} />
+  const standalone = config.data ? findValue(config.data.sections, ['Server State', 'Standalone configuration']) === 'Yes' : false
+  return <DeviceForm {...props} bootImages={bootImages.data ?? []} standalone={standalone} />
 }
 
-function DeviceForm({ device, seed, onDone, bootImages }: DeviceFormProps & { bootImages: WdsRecord[] }) {
+interface JoinDomainSwitchProps {
+  checked: boolean
+  onChange: (join: boolean) => void
+  standalone: boolean
+}
+
+/** The domain join switch; a standalone server has no domain, and a join there only fails at the end of the install. */
+export function JoinDomainSwitch({ checked, onChange, standalone }: JoinDomainSwitchProps) {
+  return (
+    <Switch
+      label="Join the domain during setup"
+      checked={checked}
+      onChange={(e) => onChange(e.currentTarget.checked)}
+      description={
+        standalone
+          ? "This WDS server is standalone, so there's no domain to join: leave this off, or the install ends with a failed join."
+          : 'The WDS client joins the computer to the domain under its name.'
+      }
+    />
+  )
+}
+
+function DeviceForm({ device, seed, onDone, bootImages, standalone }: DeviceFormProps & { bootImages: WdsRecord[]; standalone: boolean }) {
   const add = useAddDevice()
   const change = useChangeDevice()
   const error = add.error ?? change.error
@@ -66,6 +91,8 @@ function DeviceForm({ device, seed, onDone, bootImages }: DeviceFormProps & { bo
     prompt: device ? devicePrompt(device) : '',
     bootImage: (device && asString(device.BootImagePath)) ?? '',
     unattend: (device && asString(device.WdsClientUnattend)) ?? '',
+    // WDS joins prestaged devices to the domain unless told not to.
+    joinDomain: device ? device.JoinDomain !== false : !standalone,
   }
   const [name, setName] = useState(initial.name)
   const [deviceId, setDeviceId] = useState(initial.deviceId)
@@ -74,6 +101,7 @@ function DeviceForm({ device, seed, onDone, bootImages }: DeviceFormProps & { bo
   const images = bootImageChoices(bootImages, initial.bootImage)
   const [bootImage, setBootImage] = useState(images.selected)
   const [unattend, setUnattend] = useState(initial.unattend)
+  const [joinDomain, setJoinDomain] = useState(initial.joinDomain)
 
   const nameProblem = name.trim() && !isDeviceName(name) ? 'Use letters, digits, hyphens and underscores, without spaces.' : null
   const idProblem = deviceId.trim() && !isDeviceId(deviceId) ? 'Enter a MAC address or a GUID with dashes.' : null
@@ -83,6 +111,7 @@ function DeviceForm({ device, seed, onDone, bootImages }: DeviceFormProps & { bo
     pxePromptPolicy: prompt === initial.prompt ? null : prompt,
     bootImagePath: sameText(bootImage, initial.bootImage) ? null : bootImage,
     wdsClientUnattend: sameText(unattend.trim(), initial.unattend) ? null : unattend.trim(),
+    joinDomain: joinDomain === initial.joinDomain ? null : joinDomain,
   }
   const ready = device
     ? Object.values(changes).some((value) => value !== null) && !idProblem
@@ -101,6 +130,7 @@ function DeviceForm({ device, seed, onDone, bootImages }: DeviceFormProps & { bo
           pxePromptPolicy: prompt || null,
           bootImagePath: bootImage || null,
           wdsClientUnattend: unattend.trim() || null,
+          joinDomain,
         })
         notifications.show({ color: 'green', message: `Prestaged ${name.trim()}` })
       }
@@ -164,6 +194,7 @@ function DeviceForm({ device, seed, onDone, bootImages }: DeviceFormProps & { bo
         data={[{ value: NONE, label: "The boot menu, or the server's default boot image" }, ...images.choices]}
         value={bootImage || NONE}
         onChange={(v) => setBootImage(!v || v === NONE ? '' : v)}
+        description="WDS still shows its boot menu, with this image chosen when the menu's countdown ends."
         allowDeselect={false}
         comboboxProps={{ withinPortal: true }}
       />
@@ -174,6 +205,7 @@ function DeviceForm({ device, seed, onDone, bootImages }: DeviceFormProps & { bo
         placeholder="WdsClientUnattend\x64.xml"
         description="Relative to RemoteInstall. Leave empty to use the server's."
       />
+      <JoinDomainSwitch checked={joinDomain} onChange={setJoinDomain} standalone={standalone} />
       {error && (
         <Alert color="red" icon={<IconAlertTriangle />}>
           {error.message}

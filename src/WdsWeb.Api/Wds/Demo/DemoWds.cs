@@ -269,7 +269,8 @@ public static class DemoWds
         ["PxePromptPolicy"] = prompt,
         ["BootImagePath"] = bootImage,
         ["WdsClientUnattend"] = unattend,
-        ["JoinDomain"] = true,
+        // The demo server is standalone, so its devices don't join a domain.
+        ["JoinDomain"] = false,
         ["JoinRights"] = "JoinOnly",
     };
 
@@ -408,10 +409,11 @@ public static class DemoWds
         // At the boot menu right now, and one still downloading its boot image.
         Boot(events, now.AddMinutes(-2), "192.0.2.60", "00-00-5E-00-53-60", false, stopAt: BootStop.Menu);
         Boot(events, now.AddSeconds(-50), "192.0.2.63", "00-00-5E-00-53-63", true, stopAt: BootStop.Downloading);
-        // Yesterday: one that never pressed F12, and one whose unattend request WDS refused.
-        Boot(events, now.AddDays(-1).AddHours(-2), "192.0.2.70", "00-00-5E-00-53-70", false, stopAt: BootStop.PxeOnly);
-        var g = Boot(events, now.AddDays(-1).AddHours(-4), "192.0.2.45", "00-00-5E-00-53-45", false);
-        events.Add(new DemoEvent(g.Loaded.AddSeconds(20), BootActivity.UnattendBlocked, new() { ["ClientIP"] = g.Ip }, "Application", "WDSIMGSRV"));
+        // Yesterday: one where nobody answered the network boot prompt, and a lab PC whose own WDS client unattend
+        // file WDS refused to hand over (hands-free deployment is off), so its install waited for answers.
+        Boot(events, now.AddDays(-1).AddHours(-2), "192.0.2.70", "00-00-5E-00-53-70", false, stopAt: BootStop.Program);
+        var g = Boot(events, now.AddDays(-1).AddHours(-4), "192.0.2.45", "00-00-5E-00-53-12", true);
+        Install(events, g, g.Loaded.AddSeconds(12), "Windows 11", "Windows 11 Pro", @"CONTOSO\jdoe", applyMinutes: 13);
         // Two days ago: a multicast install of Windows 11 Education.
         var h = Boot(events, now.AddDays(-2).AddHours(-1), "192.0.2.81", "00-00-5E-00-53-81", true);
         Install(events, h, now.AddDays(-2).AddHours(-1).AddMinutes(2), "Windows 11", "Windows 11 Education", @"CONTOSO\asmith", applyMinutes: 11,
@@ -419,7 +421,7 @@ public static class DemoWds
         return events.OrderBy(e => e.Time).ToList();
     }
 
-    private enum BootStop { Loaded, Menu, Downloading, PxeOnly }
+    private enum BootStop { Loaded, Menu, Downloading, Program }
 
     private sealed record BootedClient(string Ip, string Mac, string DeviceId, DateTimeOffset Loaded);
 
@@ -431,10 +433,9 @@ public static class DemoWds
             ["ClientHardwareAddress"] = mac, ["ClientIP"] = ip, ["ClientDeviceID"] = deviceId, ["ClientArch"] = "4", ["ClientPrestaged"] = prestaged ? "true" : "false",
         };
         events.Add(new DemoEvent(start, BootActivity.PxeBoot, pxe));
-        if (stopAt == BootStop.PxeOnly) return new BootedClient(ip, mac, deviceId, start);
-
         var t = start.AddSeconds(1);
         Download(events, ref t, ip, @"boot\x64\wdsmgfw.efi", 1_588_656, 1);
+        if (stopAt == BootStop.Program) return new BootedClient(ip, mac, deviceId, t);
         events.Add(new DemoEvent(t.AddSeconds(7), BootActivity.PxeBoot, pxe));
         t = t.AddSeconds(8);
         Download(events, ref t, ip, @"\Boot\x64\bootmgfw.efi", 2_934_112, 1);
@@ -470,7 +471,7 @@ public static class DemoWds
             var data = new Dictionary<string, string>
             {
                 ["SessionGUID"] = Id($"session:{client.Mac}:{start:O}").ToString("B").ToUpperInvariant(),
-                ["ClientMAC"] = client.Mac, ["ClientIP"] = client.Ip, ["ClientDeviceID"] = client.DeviceId, ["ClientArch"] = "4",
+                ["ClientMAC"] = client.Mac, ["ClientIP"] = client.Ip, ["ClientDeviceID"] = client.DeviceId, ["ClientArch"] = "9",
             };
             foreach (var (name, value) in extra) data[name] = value;
             return data;
@@ -478,13 +479,21 @@ public static class DemoWds
         void Add(DateTimeOffset time, int id, params (string, string)[] extra) => events.Add(new DemoEvent(time, id, Fields(extra)));
 
         Add(start, DeploymentEvents.ClientStarted, ("ClientVersion", "10.0.26100.6584"), ("WinPEVersion", "10.0.26100.6584"));
-        Add(start.AddSeconds(5), DeploymentEvents.UnattendMode, ("UnattendMode", "Attended"));
+        // Setup asks for the WDS client unattend file as it starts, and WDS refuses, whether there's one or not.
+        events.Add(new DemoEvent(start.AddMilliseconds(7), BootActivity.UnattendBlocked, new() { ["ClientIP"] = client.Ip }, "Application", "WDSIMGSRV"));
         var t = start.AddMinutes(1);
-        Add(t, DeploymentEvents.ImageSelectedWithDetails, ("ImageGroup", group), ("ImageName", image), ("ImageLanguage", "en-US"), ("ImageArch", "x64"), ("FullUserName", user));
-        Add(t.AddSeconds(3), DeploymentEvents.TransferStarted, ("ImageGroup", group), ("ImageName", image), ("MulticastNamespace", multicast ?? ""));
+        Add(t, DeploymentEvents.ImageSelectedWithDetails, ("ImageGroup", group), ("ImageName", image), ("ImageLanguage", "en-US"), ("ImageArch", "9"), ("FullUserName", user));
         if (multicast is not null)
+        {
+            Add(t.AddSeconds(3), DeploymentEvents.TransferStarted, ("ImageGroup", group), ("ImageName", image), ("MulticastNamespace", multicast));
             events.Add(new DemoEvent(t.AddSeconds(4), DeploymentEvents.MulticastJoined, new() { ["ClientMAC"] = client.Mac, ["ClientIP"] = client.Ip, ["NamespaceName"] = multicast, ["ObjectName"] = image }));
-        Add(t.AddSeconds(6), DeploymentEvents.ApplyStarted, ("ImageGroup", group), ("ImageName", image));
+        }
+        else
+        {
+            // With no multicast transmission, WDS logs a "downgrade" and the client installs straight from the share.
+            Add(t.AddSeconds(17), DeploymentEvents.TransferDowngraded, ("ImageGroup", group), ("ImageName", image), ("MulticastNamespace", ""));
+        }
+        Add(t.AddSeconds(19), DeploymentEvents.ApplyStarted, ("ImageGroup", group), ("ImageName", image));
         if (fatalError is not null)
         {
             events.Add(new DemoEvent(t.AddMinutes(3), DeploymentEvents.FatalError, Fields(("ErrorMessage", fatalError)), "Admin"));
@@ -495,9 +504,11 @@ public static class DemoWds
 
         var applied = t.AddMinutes(minutes);
         Add(applied, DeploymentEvents.ApplyEnded, ("ImageGroup", group), ("ImageName", image));
-        Add(applied.AddSeconds(1), DeploymentEvents.TransferEnded, ("ImageGroup", group), ("ImageName", image), ("MulticastNamespace", multicast ?? ""));
         if (multicast is not null)
+        {
+            Add(applied.AddSeconds(1), DeploymentEvents.TransferEnded, ("ImageGroup", group), ("ImageName", image), ("MulticastNamespace", multicast));
             events.Add(new DemoEvent(applied.AddSeconds(2), DeploymentEvents.MulticastLeft, new() { ["ClientMAC"] = client.Mac, ["ClientIP"] = client.Ip, ["NamespaceName"] = multicast, ["ObjectName"] = image }));
+        }
         Add(applied.AddSeconds(5), DeploymentEvents.PostApplyStarted);
         Add(applied.AddSeconds(8), DeploymentEvents.DriverRequestCompleted, ("NumDriverPackages", "6"));
         Add(applied.AddSeconds(10), DeploymentEvents.DriverInjectionStarted);
@@ -555,7 +566,7 @@ public static class DemoWds
             BootActivity.UnattendBlocked => (3, "Unattend file request was made over an insecure connection. Windows Deployment Services has blocked the request to keep the system secure. For more information, see: https://go.microsoft.com/fwlink/?linkid=2344403"),
             256 => (4, "The Windows Deployment Services server started successfully."),
             DeploymentEvents.ClientStarted => (4, $"The following WDS Client has started: {Client()}\n ClientVer: {F("ClientVersion")}\n WinPEVer: {F("WinPEVersion")}"),
-            DeploymentEvents.UnattendMode => (4, $"The following WDS Client has processed unattend mode: {Client()}\n UnattendMode: {F("UnattendMode")}"),
+            DeploymentEvents.TransferDowngraded => (3, $"The following WDS Client has downgraded Image Transfer: {Client()}\n ImageGroup: {F("ImageGroup")}\n ImageName: {F("ImageName")}\n MulticastNamespace: {F("MulticastNamespace")}"),
             DeploymentEvents.ImageSelectedWithDetails => (4, $"The following WDS Client has selected Image: {Client()}\n ImageGroup: {F("ImageGroup")}\n ImageName: {F("ImageName")}\n ImageLanguage: {F("ImageLanguage")}\n ImageArchitecture: {F("ImageArch")}\n FullUserName: {F("FullUserName")}"),
             DeploymentEvents.TransferStarted => (4, $"The following WDS Client has started Image Transfer: {Client()}\n ImageGroup: {F("ImageGroup")}\n ImageName: {F("ImageName")}\n MulticastNamespace: {F("MulticastNamespace")}"),
             DeploymentEvents.TransferEnded => (4, $"The following WDS Client has ended Image Transfer: {Client()}\n ImageGroup: {F("ImageGroup")}\n ImageName: {F("ImageName")}\n MulticastNamespace: {F("MulticastNamespace")}"),

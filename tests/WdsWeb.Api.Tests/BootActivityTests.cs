@@ -32,7 +32,7 @@ public class BootActivityTests
         var session = Assert.Single(BootActivity.Build(events, T0.AddMinutes(5)));
 
         Assert.Equal(BootStatus.Loaded, session.Status);
-        Assert.Equal((Ip, Mac, "x64uefi", 4, false), (session.ClientIp, session.MacAddress, session.Architecture, session.ArchitectureCode, session.Prestaged));
+        Assert.Equal((Ip, Mac, "x64 UEFI", 4, false), (session.ClientIp, session.MacAddress, session.Architecture, session.ArchitectureCode, session.Prestaged));
         Assert.Equal(Image, session.BootImage);
         Assert.Equal(5, session.Transfers.Count);
         Assert.All(session.Transfers, t => Assert.True(t.Succeeded));
@@ -105,6 +105,106 @@ public class BootActivityTests
         };
 
         Assert.Equal(BootStatus.BootMenu, Assert.Single(BootActivity.Build(events, T0.AddMinutes(1))).Status);
+    }
+
+    [Fact]
+    public void A_client_that_stops_at_the_prompt_ran_only_the_boot_program()
+    {
+        // Nobody pressed Enter at the UEFI prompt, so the firmware moved on; it tried again a minute later.
+        var events = new[]
+        {
+            Pxe(0),
+            Transfer(1, BootActivity.TftpStarted, @"boot\x64\wdsmgfw.efi"),
+            Transfer(2, BootActivity.TftpCompleted, @"boot\x64\wdsmgfw.efi"),
+            Transfer(60, BootActivity.TftpStarted, @"boot\x64\wdsmgfw.efi"),
+            Transfer(61, BootActivity.TftpCompleted, @"boot\x64\wdsmgfw.efi"),
+        };
+
+        var session = Assert.Single(BootActivity.Build(events, T0.AddMinutes(5)));
+
+        Assert.Equal(BootStatus.BootProgram, session.Status);
+        Assert.Equal("x64 UEFI", session.Architecture);
+    }
+
+    [Fact]
+    public void Splits_a_real_run_of_restarts_into_boots()
+    {
+        // As a WDS server logged a UEFI client restarted twice mid-download, then booted once it was prestaged.
+        // The firmware fetched the boot program again without a PXE request for the last boot.
+        const string bcd = @"\Tmp\x64uefi{27D99AE5-7BC1-4B13-868A-A9AF4DF89A3C}.bcd";
+        var events = new[]
+        {
+            Pxe(0),
+            Transfer(1, BootActivity.TftpStarted, @"boot\x64\wdsmgfw.efi"),
+            Transfer(2, BootActivity.TftpCompleted, @"boot\x64\wdsmgfw.efi"),
+            Pxe(3),
+            Transfer(3, BootActivity.TftpStarted, @"\Boot\x64\bootmgfw.efi"),
+            Transfer(5, BootActivity.TftpCompleted, @"\Boot\x64\bootmgfw.efi"),
+            Transfer(5, BootActivity.TftpStarted, bcd),
+            Transfer(5, BootActivity.TftpCompleted, bcd),
+            Transfer(35, BootActivity.TftpStarted, @"\Boot\Boot.SDI"),
+            Transfer(35, BootActivity.TftpCompleted, @"\Boot\Boot.SDI"),
+            Transfer(36, BootActivity.TftpStarted, @"\Boot\x64\Images\boot-win11-26h1.wim"),
+            // Reset: a new boot, whose download is cut short the same way.
+            Pxe(57),
+            Transfer(58, BootActivity.TftpStarted, @"boot\x64\wdsmgfw.efi"),
+            Transfer(59, BootActivity.TftpCompleted, @"boot\x64\wdsmgfw.efi"),
+            Pxe(60),
+            Transfer(60, BootActivity.TftpStarted, bcd),
+            Transfer(60, BootActivity.TftpCompleted, bcd),
+            Transfer(92, BootActivity.TftpStarted, @"\Boot\x64\Images\boot-win11-26h1.wim"),
+            // Reset again, and this time it loads.
+            Transfer(300, BootActivity.TftpStarted, @"boot\x64\wdsmgfw.efi"),
+            Transfer(301, BootActivity.TftpCompleted, @"boot\x64\wdsmgfw.efi"),
+            Pxe(301, prestaged: true),
+            Transfer(302, BootActivity.TftpStarted, @"\Tmp\x64{C50E2713-A170-4CD4-9249-7CA69DC8212E}.bcd"),
+            Transfer(302, BootActivity.TftpCompleted, @"\Tmp\x64{C50E2713-A170-4CD4-9249-7CA69DC8212E}.bcd"),
+            Transfer(325, BootActivity.TftpStarted, Image),
+            Transfer(338, BootActivity.TftpCompleted, Image),
+        };
+
+        // Only a few minutes on, so the cut-short downloads aren't stale yet: the later boots show they stopped.
+        var sessions = BootActivity.Build(events, T0.AddMinutes(6));
+
+        Assert.Equal([BootStatus.Loaded, BootStatus.Incomplete, BootStatus.Incomplete], sessions.Select(s => s.Status));
+        Assert.Equal([true, false, false], sessions.Select(s => s.Prestaged));
+        Assert.All(sessions, s => Assert.Equal(Mac, s.MacAddress));
+        Assert.Equal([T0.AddSeconds(300), T0.AddSeconds(57), T0], sessions.Select(s => s.FirstSeen));
+    }
+
+    [Fact]
+    public void A_client_prestaged_between_tries_starts_a_new_session()
+    {
+        var events = new[]
+        {
+            Pxe(0),
+            Transfer(1, BootActivity.TftpStarted, @"boot\x64\wdsmgfw.efi"),
+            Transfer(2, BootActivity.TftpCompleted, @"boot\x64\wdsmgfw.efi"),
+            Pxe(230, prestaged: true),
+            Transfer(231, BootActivity.TftpStarted, @"boot\x64\wdsmgfw.efi"),
+            Transfer(232, BootActivity.TftpCompleted, @"boot\x64\wdsmgfw.efi"),
+        };
+
+        var sessions = BootActivity.Build(events, T0.AddMinutes(5));
+
+        Assert.Equal([true, false], sessions.Select(s => s.Prestaged));
+    }
+
+    [Fact]
+    public void A_download_that_fails_after_the_client_booted_again_stays_with_its_boot()
+    {
+        var events = new[]
+        {
+            Pxe(0),
+            Transfer(5, BootActivity.TftpStarted, Image),
+            Pxe(100),
+            Transfer(150, BootActivity.TftpFailed, Image, errorCode: "1460"),
+        };
+
+        var sessions = BootActivity.Build(events, T0.AddMinutes(5));
+
+        Assert.Equal([BootStatus.PxeOnly, BootStatus.Failed], sessions.Select(s => s.Status));
+        Assert.Empty(sessions[0].Transfers);
     }
 
     [Fact]
@@ -195,6 +295,41 @@ public class BootActivityTests
     }
 
     [Fact]
+    public void Follows_a_real_unicast_install()
+    {
+        // As a WDS server logged an install with no multicast transmission, from a prestaged device that WDS
+        // tried to join to a domain although the server is standalone.
+        var events = new[]
+        {
+            Client(0, DeploymentEvents.ClientStarted, Ip, ("ClientArch", "9"), ("ClientVersion", "10.0.19041.1"), ("WinPEVersion", "10.0.19041.5915")),
+            UnattendRefused(0),
+            Client(175, DeploymentEvents.ImageSelectedWithDetails, Ip, ("ImageGroup", "Win11"), ("ImageName", "Windows 11 Pro"),
+                ("ImageLanguage", "en-US"), ("FullUserName", @"CONTOSO\jdoe"), ("ImageArch", "9")),
+            Client(192, DeploymentEvents.TransferDowngraded, Ip, ("ImageGroup", "Win11"), ("ImageName", "Windows 11 Pro"), ("MulticastNamespace", "")),
+            Client(193, DeploymentEvents.ApplyStarted, Ip),
+            Client(577, DeploymentEvents.ApplyEnded, Ip),
+            Client(580, DeploymentEvents.PostApplyStarted, Ip),
+            Client(581, DeploymentEvents.DomainJoinError, Ip, ("MachineName", "PC-01"), ("MachineOU", ""), ("ErrorCode", "0x80070057")),
+            Client(581, DeploymentEvents.PostApplyEnded, Ip),
+            Client(594, DeploymentEvents.DriverInjectionStarted, Ip),
+            Client(850, DeploymentEvents.DriverInjectionEnded, Ip),
+            Client(867, DeploymentEvents.ClientEnded, Ip),
+        };
+
+        var session = Assert.Single(BootActivity.Build(events, T0.AddHours(1)));
+        var deployment = Assert.IsType<Deployment>(session.Deployment);
+
+        Assert.Equal(DeploymentStage.Finished, deployment.Stage);
+        Assert.Equal("x64", deployment.ImageArchitecture);
+        Assert.True(deployment.Unicast);
+        Assert.Null(deployment.TransferStartedAt);
+        // Installing straight from the server is the usual case, not a warning.
+        Assert.Contains(deployment.Timeline, note => note.Level == "info" && note.Text.StartsWith("Installing straight from the server"));
+        Assert.Equal("Couldn't join PC-01 to the domain (error 0x80070057)", deployment.Error);
+        Assert.Equal(BootNoteKind.UnattendBlocked, Assert.Single(session.Notes).Kind);
+    }
+
+    [Fact]
     public void Shows_driver_errors_in_hex()
     {
         var events = new[]
@@ -235,14 +370,14 @@ public class BootActivityTests
     private static WdsEventRecord UnattendRefused(int seconds) =>
         new(T0.AddSeconds(seconds), BootActivity.UnattendBlocked, new Dictionary<string, string> { ["ClientIP"] = Ip });
 
-    private static WdsEventRecord Pxe(int seconds, string ip = Ip, string mac = Mac) =>
+    private static WdsEventRecord Pxe(int seconds, string ip = Ip, string mac = Mac, bool prestaged = false) =>
         new(T0.AddSeconds(seconds), BootActivity.PxeBoot, new Dictionary<string, string>
         {
             ["ClientHardwareAddress"] = mac,
             ["ClientIP"] = ip,
             ["ClientDeviceID"] = "{E8A3EFAC-201F-4E69-953E-B2DAA1E8B1B6}",
             ["ClientArch"] = "4",
-            ["ClientPrestaged"] = "false",
+            ["ClientPrestaged"] = prestaged ? "true" : "false",
         });
 
     private static WdsEventRecord Transfer(int seconds, int id, string file, string size = "1024", string? errorCode = null)
