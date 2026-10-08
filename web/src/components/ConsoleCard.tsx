@@ -27,7 +27,9 @@ export function ConsoleCard() {
               <Row label="Manages">
                 {info.mode === 'remote'
                   ? `${info.server}, over WinRM from ${info.consoleHost} (Remote mode)`
-                  : `WDS on ${info.server}, where the console runs (Local mode)`}
+                  : info.mode === 'demo'
+                    ? `A sample WDS server, ${info.server} (Demo mode): nothing can be changed`
+                    : `WDS on ${info.server}, where the console runs (Local mode)`}
               </Row>
               <Row label="Connects as">{info.connectsAs}</Row>
               <Row label="Staging folder">

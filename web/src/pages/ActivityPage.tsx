@@ -92,7 +92,7 @@ export function ActivityPage() {
 
 function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelect: (session: BootSession) => void }) {
   return (
-    <Table.ScrollContainer minWidth={960}>
+    <Table.ScrollContainer minWidth={860}>
       <Table striped highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           <Table.Tr>
@@ -101,7 +101,6 @@ function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelec
             <Table.Th>Arch</Table.Th>
             <Table.Th>Status</Table.Th>
             <Table.Th>Boot image</Table.Th>
-            <Table.Th>Download</Table.Th>
             <Table.Th>Install</Table.Th>
           </Table.Tr>
         </Table.Thead>
@@ -149,14 +148,15 @@ function SessionTable({ sessions, onSelect }: { sessions: BootSession[]; onSelec
                     )}
                   </Group>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td style={{ whiteSpace: 'nowrap' }}>
                   <Text size="sm">{session.bootImage ? baseName(session.bootImage) : EMPTY}</Text>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm">
-                    {seconds != null ? `${seconds.toFixed(0)} s` : EMPTY}
-                    {image?.fileSize ? ` · ${formatBytes(image.fileSize)}` : ''}
-                  </Text>
+                  {(seconds != null || image?.fileSize) && (
+                    <Text size="xs" c="dimmed">
+                      {[seconds != null ? `${seconds.toFixed(0)} s` : null, image?.fileSize ? formatBytes(image.fileSize) : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  )}
                 </Table.Td>
                 <Table.Td>
                   {session.deployment ? (
@@ -267,8 +267,14 @@ function SessionDetail({ session, onPrestage }: { session: BootSession; onPresta
 
 /** The install as the WDS client reported it: what it chose, how long each part took, and what happened. */
 function DeploymentDetail({ deployment }: { deployment: Deployment }) {
+  const active = deployment.stage !== 'finished' && deployment.stage !== 'failed'
+  // How long a step took, or for one still going, when it started.
   const took = (from: string | null, to: string | null) =>
-    from && to ? formatMinutes((new Date(to).getTime() - new Date(from).getTime()) / 1000) : null
+    from && to
+      ? formatMinutes((new Date(to).getTime() - new Date(from).getTime()) / 1000)
+      : from && active
+        ? `Started ${formatAgo(from)}`
+        : null
   const download = took(deployment.transferStartedAt, deployment.transferFinishedAt)
   const apply = took(deployment.applyStartedAt, deployment.applyFinishedAt)
   const facts: [string, string][] = [

@@ -7,6 +7,9 @@ public enum WdsConnectionMode
 
     /// <summary>The WDS server is another machine, reached over WinRM.</summary>
     Remote,
+
+    /// <summary>No WDS server: a sample one, to try the console out. Nothing can be changed.</summary>
+    Demo,
 }
 
 /// <summary>How to reach the WDS server. Bound from the "Wds" configuration section.</summary>

@@ -109,7 +109,7 @@ function ServerStatus() {
     <Tooltip label={tooltip} multiline maw={360}>
       <Badge variant="dot" color={color} size="lg" tt="none">
         {connection.data?.target ?? '…'}
-        {connection.data?.mode === 'Remote' ? ' (remote)' : ''}
+        {connection.data?.mode === 'Remote' ? ' (remote)' : connection.data?.mode === 'Demo' ? ' (demo)' : ''}
       </Badge>
     </Tooltip>
   )

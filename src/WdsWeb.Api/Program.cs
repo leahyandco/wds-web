@@ -32,11 +32,22 @@ if (!builder.Environment.IsDevelopment())
     builder.Configuration.AddCommandLine(args);
 }
 
+// The demo answers from sample data, with no WDS server; it can't change anything, so unless told
+// otherwise it doesn't ask anyone to sign in.
+var demo = builder.Configuration.GetValue<WdsConnectionMode?>("Wds:Mode") == WdsConnectionMode.Demo;
+if (demo && builder.Configuration["Auth:Enabled"] is null)
+    builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Auth:Enabled"] = "false" });
+
 builder.Services.AddWindowsService(options => options.ServiceName = "WdsWeb");
-builder.Logging.AddEventLog(settings => settings.SourceName = "WDS Console");
-builder.Logging.AddFilter<EventLogLoggerProvider>("WdsWeb.Audit", LogLevel.Information);
-// Who may sign in, logged once at startup, so it's on record next to the audit log.
-builder.Logging.AddFilter<EventLogLoggerProvider>(typeof(WindowsSignIn).FullName, LogLevel.Information);
+if (WindowsServiceHelpers.IsWindowsService())
+{
+    // The service logs to the Application event log, under the source the installer registers. Run
+    // by hand (development, the demo), the console logs to the console instead.
+    builder.Logging.AddEventLog(settings => settings.SourceName = "WDS Console");
+    builder.Logging.AddFilter<EventLogLoggerProvider>("WdsWeb.Audit", LogLevel.Information);
+    // Who may sign in, logged once at startup, so it's on record next to the audit log.
+    builder.Logging.AddFilter<EventLogLoggerProvider>(typeof(WindowsSignIn).FullName, LogLevel.Information);
+}
 
 UseHttpsIfConfigured(builder);
 
@@ -107,7 +118,9 @@ builder.Services.AddRateLimiter(limiter =>
 
 var app = builder.Build();
 
-if (!auth.Enabled && !app.Environment.IsDevelopment())
+if (demo)
+    app.Logger.LogInformation("Demo mode: showing a sample WDS server ({Server}); nothing can be changed.", WdsWeb.Api.Wds.Demo.DemoWds.ServerName);
+else if (!auth.Enabled && !app.Environment.IsDevelopment())
     app.Logger.LogWarning("Sign-in is turned off (Auth:Enabled is false): anyone who can reach this service can change WDS.");
 // Say who may sign in, and flag names Windows can't find, without holding up startup on a slow domain controller.
 if (auth.Enabled) _ = Task.Run(app.Services.GetRequiredService<WindowsSignIn>().LogAllowed);

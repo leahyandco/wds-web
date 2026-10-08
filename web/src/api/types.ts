@@ -8,7 +8,7 @@ export interface SessionInfo {
 }
 
 export interface ConnectionInfo {
-  mode: 'Local' | 'Remote'
+  mode: 'Local' | 'Remote' | 'Demo'
   target: string
 }
 
@@ -78,7 +78,7 @@ export interface AllowedAccount {
 /** How this console is set up: what it manages, as whom, and who may use it. */
 export interface ConsoleInfo {
   version: string
-  mode: 'local' | 'remote'
+  mode: 'local' | 'remote' | 'demo'
   server: string
   consoleHost: string
   /** The account the WDS server sees the console as. */

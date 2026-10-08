@@ -4,6 +4,7 @@ using System.Management.Automation.Runspaces;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using WdsWeb.Api.Wds.Demo;
 
 namespace WdsWeb.Api.Wds;
 
@@ -38,7 +39,12 @@ public sealed class WdsSessionPool : IDisposable
 
     public WdsConnectionMode Mode => _options.Mode;
 
-    public string TargetName => _options.Mode == WdsConnectionMode.Remote ? _options.ComputerName! : Environment.MachineName;
+    public string TargetName => _options.Mode switch
+    {
+        WdsConnectionMode.Remote => _options.ComputerName!,
+        WdsConnectionMode.Demo => DemoWds.ServerName,
+        _ => Environment.MachineName,
+    };
 
     /// <summary>The credential for the WDS server in Remote mode; null means the service's own identity.</summary>
     internal PSCredential? Credential => _options.Mode == WdsConnectionMode.Remote ? _credential.Value : null;
@@ -107,6 +113,8 @@ public sealed class WdsSessionPool : IDisposable
 
     private Runspace CreateRunspace()
     {
+        if (_options.Mode == WdsConnectionMode.Demo)
+            throw new InvalidOperationException("Demo mode has no WDS server to open a session on.");
         if (_options.Mode == WdsConnectionMode.Local)
         {
             // Asking for 5.1 makes PowerShellProcessInstance start Windows PowerShell rather than pwsh.

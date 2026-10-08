@@ -27,7 +27,12 @@ public sealed class StagingArea
         if (ServerRoot.Length < 4 || ServerRoot[1] != ':' || ServerRoot[2] != '\\' || !char.IsAsciiLetter(ServerRoot[0]))
             throw new InvalidOperationException(@"Wds:StagingPath must be a folder on a drive of the WDS server, such as C:\WdsWeb\Staging.");
 
-        if (_options.Mode == WdsConnectionMode.Local)
+        if (_options.Mode == WdsConnectionMode.Demo)
+        {
+            // Nothing is uploaded in the demo, but listing uploads still needs a folder.
+            ServerRoot = LocalRoot = Path.Combine(Path.GetTempPath(), "WdsWebDemo");
+        }
+        else if (_options.Mode == WdsConnectionMode.Local)
         {
             LocalRoot = ServerRoot;
         }
@@ -45,6 +50,9 @@ public sealed class StagingArea
 
     /// <summary>The staging folder as the WDS server sees it, e.g. C:\WdsWeb\Staging.</summary>
     public string ServerRoot { get; }
+
+    /// <summary>Demo mode, which takes no uploads.</summary>
+    public bool IsDemo => _options.Mode == WdsConnectionMode.Demo;
 
     /// <summary>The same folder as this process reaches it: a local path, or a UNC path in Remote mode.</summary>
     public string LocalRoot { get; }

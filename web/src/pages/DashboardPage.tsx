@@ -14,6 +14,7 @@ import { Link } from 'react-router'
 import { useActivity, useBootImages, useDevices, useEvents, useInstallImages, useServerConfig, useTarget } from '../api/queries'
 import type { BootSession, ServerConfig, TargetInfo, WdsEvent } from '../api/types'
 import { BootStatusBadge } from '../components/BootStatusBadge'
+import { DeploymentStageBadge } from '../components/DeploymentStageBadge'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { StatCard } from '../components/StatCard'
@@ -140,10 +141,15 @@ function RecentBoots({ sessions }: { sessions: BootSession[] }) {
             </Text>
             <Text size="xs" c="dimmed">
               {formatAgo(session.lastSeen)} · {session.clientIp}
-              {session.bootImage ? ` · ${baseName(session.bootImage)}` : ''}
+              {session.deployment?.imageName
+                ? ` · ${session.deployment.imageName}`
+                : session.bootImage
+                  ? ` · ${baseName(session.bootImage)}`
+                  : ''}
             </Text>
           </div>
-          <BootStatusBadge status={session.status} />
+          {/* Once the WDS client reports an install, its stage says more than the boot's. */}
+          {session.deployment ? <DeploymentStageBadge stage={session.deployment.stage} /> : <BootStatusBadge status={session.status} />}
         </Group>
       ))}
     </Stack>

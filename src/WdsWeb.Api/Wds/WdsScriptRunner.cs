@@ -3,6 +3,7 @@ using System.Management.Automation.Remoting;
 using System.Management.Automation.Runspaces;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using WdsWeb.Api.Wds.Demo;
 
 namespace WdsWeb.Api.Wds;
 
@@ -25,6 +26,8 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
         TimeSpan? timeout = null,
         CancellationToken ct = default)
     {
+        if (options.Value.Mode == WdsConnectionMode.Demo) return DemoWds.Run(scriptName, parameters, DateTimeOffset.UtcNow);
+
         var script = WdsScripts.Get(scriptName);
         var limit = timeout ?? options.Value.CommandTimeout;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -84,6 +87,8 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
         Action<ProgressRecord> onProgress,
         CancellationToken ct)
     {
+        if (options.Value.Mode == WdsConnectionMode.Demo) throw new InvalidRequestException(DemoWds.NothingChanges);
+
         var limit = options.Value.JobTimeout;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(limit);

@@ -17,6 +17,8 @@
   <ItemGroup>
     <!-- These run on the WDS server. Embedding them keeps a deployed build and its scripts in step. -->
     <EmbeddedResource Include="Wds\Scripts\*.ps1" LogicalName="WdsWeb.Scripts.%(Filename)%(Extension)" />
+    <!-- Real WDSUTIL output that demo mode shows, and the tests parse. -->
+    <EmbeddedResource Include="Wds\Demo\*.txt" LogicalName="WdsWeb.Demo.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

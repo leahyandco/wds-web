@@ -17,7 +17,7 @@ settings from another file, point the `WDSWEB_SETTINGS` environment variable at 
 
 | Setting | Default | |
 | --- | --- | --- |
-| `Mode` | `Local` | `Local` when the console runs on the WDS server. `Remote` to manage the server named in `ComputerName` over WinRM. |
+| `Mode` | `Local` | `Local` when the console runs on the WDS server. `Remote` to manage the server named in `ComputerName` over WinRM. `Demo` shows a sample server instead, to try the console out; nothing can be changed, and sign-in is off unless `Auth:Enabled` says otherwise. |
 | `ComputerName` | | Remote mode: the WDS server's name or address. |
 | `CredentialFile` | | Remote mode: the account to connect as. The installer's `-Credential` writes `C:\ProgramData\WdsWeb\credential.json`, encrypted for this machine. A PSCredential saved with `Get-Credential \| Export-Clixml` also works, for the Windows account that saved it. Left out, the console connects as its service account. |
 | `UseSsl` | `false` | Connect to WinRM over HTTPS, which needs a WinRM HTTPS listener on the WDS server. |

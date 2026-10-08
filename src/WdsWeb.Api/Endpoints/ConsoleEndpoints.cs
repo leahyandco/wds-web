@@ -50,6 +50,7 @@ public static class ConsoleEndpoints
     // Who the WDS server sees: the stored credential's account, or this service's own.
     private static string ConnectsAs(WdsSessionPool pool, WdsOptions wds, string serviceAccount)
     {
+        if (pool.Mode == WdsConnectionMode.Demo) return "Nobody: the demo's server is a sample";
         if (pool.Mode == WdsConnectionMode.Local) return serviceAccount;
         if (string.IsNullOrWhiteSpace(wds.CredentialFile))
         {

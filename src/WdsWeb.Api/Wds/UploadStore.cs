@@ -33,6 +33,7 @@ public sealed partial class UploadStore(StagingArea staging)
 
     public UploadInfo Create(string fileName, long size)
     {
+        if (staging.IsDemo) throw new InvalidRequestException(Demo.DemoWds.NothingChanges);
         fileName = fileName.Trim();
         if (fileName.Length is 0 or > 200 || Path.GetFileName(fileName) != fileName || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             throw new InvalidRequestException($"\"{fileName}\" isn't a usable file name.");

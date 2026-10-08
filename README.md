@@ -4,6 +4,11 @@ A web console for **Windows Deployment Services**. Manage boot and install image
 settings, and watch PXE boots and installs as they happen, from any browser instead of the WDS MMC
 snap-in on the server.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.jpg">
+  <img src="docs/images/dashboard-light.jpg" width="800" alt="The dashboard: the WDS service, image and device counts, recent boots with how far each install got, and problems from WDS's event logs">
+</picture>
+
 It runs as a Windows service, either on the WDS server itself or on another Windows machine on the
 same network, and signs people in with their Windows accounts.
 
@@ -21,6 +26,71 @@ same network, and signs people in with their Windows accounts.
 - **Drivers** and **events**: the whole driver store, and WDS's event logs without the routine noise.
 - **Access control and audit**: Windows sign-in for the groups and users you choose, and every change
   recorded, with who made it, in the Windows event log.
+
+<table>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/activity-dark.jpg">
+        <img src="docs/images/activity-light.jpg" alt="Boot activity: each PXE boot, its boot image download and the install that followed">
+      </picture>
+      <b>Boot activity</b>: every PXE boot, what it downloaded, and how far its install got.
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/install-detail-dark.jpg">
+        <img src="docs/images/install-detail-light.jpg" alt="One install's details: the image chosen, by whom, and a timeline from the WDS client's events">
+      </picture>
+      <b>Install details</b>: the image chosen and by whom, with a timeline from the WDS client.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/boot-images-dark.jpg">
+        <img src="docs/images/boot-images-light.jpg" alt="Boot images, with their Windows version, architecture, size and status">
+      </picture>
+      <b>Boot images</b>: import, enable, disable, rename, reorder and remove.
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/drivers-dark.jpg">
+        <img src="docs/images/drivers-light.jpg" alt="The driver store: packages by class, version and date, and the driver groups they're in">
+      </picture>
+      <b>Drivers</b>: the whole driver store, by group, class and provider.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/devices-dark.jpg">
+        <img src="docs/images/devices-light.jpg" alt="Devices waiting for approval, approved and rejected">
+      </picture>
+      <b>Devices</b>: prestage devices, and approve or reject the ones waiting.
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/server-settings-dark.jpg">
+        <img src="docs/images/server-settings-light.jpg" alt="Server settings: mode, PXE response, hands-free deployment, RemoteInstall space and every WDS policy">
+      </picture>
+      <b>Server settings</b>: every WDS policy, editable a section at a time.
+    </td>
+  </tr>
+</table>
+
+These pictures come from the console's demo mode, which shows a made-up WDS server.
+
+## Try it without a WDS server
+
+Demo mode runs the console against a sample WDS server (WDS01 in contoso.com) with images, devices,
+drivers and boots at every stage, so you can look around before installing anything. Extract the
+release on any 64-bit Windows machine that doesn't have the console installed, and run:
+
+```powershell
+.\app\WdsWeb.Api.exe --Wds:Mode=Demo --urls=http://localhost:5080
+```
+
+Then browse to `http://localhost:5080`. Nothing in the demo can be changed.
 
 ## Requirements
 
@@ -160,7 +230,9 @@ npm ci --prefix web
 npm run dev --prefix web                      # http://localhost:5173, proxies /api to 5080
 ```
 
-Use `--launch-profile local` instead to manage WDS on the machine you're on.
+Use `--launch-profile local` instead to manage WDS on the machine you're on, or `--launch-profile demo`
+to work on the frontend against the sample server, with no WDS anywhere. The README's screenshots are
+taken from the demo at 1200×900, in the light and dark themes.
 
 Tests: `dotnet test WdsWeb.slnx`. Frontend checks: `npm run build --prefix web` and
 `npm run lint --prefix web`.

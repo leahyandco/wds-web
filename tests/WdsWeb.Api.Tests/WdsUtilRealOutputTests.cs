@@ -1,12 +1,15 @@
 using WdsWeb.Api.Wds;
+using WdsWeb.Api.Wds.Demo;
 
 namespace WdsWeb.Api.Tests;
 
-/// <summary>`wdsutil /Get-Server /Show:Config` as printed by a standalone WDS server on Windows Server 2025.</summary>
+/// <summary>
+/// `wdsutil /Get-Server /Show:Config` as printed by a standalone WDS server on Windows Server 2025,
+/// which demo mode also shows.
+/// </summary>
 public class WdsUtilRealOutputTests
 {
-    private static readonly IReadOnlyList<WdsUtilNode> Sections =
-        WdsUtilOutputParser.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "get-server-config.txt")));
+    private static readonly IReadOnlyList<WdsUtilNode> Sections = WdsUtilOutputParser.Parse(DemoResources.Text("get-server-config.txt"));
 
     [Fact]
     public void Keeps_only_the_two_banners_at_the_top_level()

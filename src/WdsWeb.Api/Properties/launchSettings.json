@@ -19,6 +19,16 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "Wds__Mode": "Local"
       }
+    },
+    "demo": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5080",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Wds__Mode": "Demo"
+      }
     }
   }
 }
