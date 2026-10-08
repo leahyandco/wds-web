@@ -137,6 +137,12 @@ export interface DeviceApproval {
   joinDomain?: boolean | null
 }
 
+/** Which answered requests to delete; WDS deletes them only by status. */
+export interface ClearedRequests {
+  approved: boolean
+  rejected: boolean
+}
+
 export interface DriverPackage {
   id: string
   name: string

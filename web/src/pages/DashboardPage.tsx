@@ -18,7 +18,7 @@ import { DeploymentStageBadge } from '../components/DeploymentStageBadge'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { StatCard } from '../components/StatCard'
-import { baseName } from '../lib/boot'
+import { baseName, clientAddress } from '../lib/boot'
 import { isProblem, levelColor } from '../lib/events'
 import { EMPTY, formatAgo, formatBytes, formatDateTime, plural } from '../lib/format'
 
@@ -140,7 +140,7 @@ function RecentBoots({ sessions }: { sessions: BootSession[] }) {
               {session.macAddress ?? session.clientIp}
             </Text>
             <Text size="xs" c="dimmed">
-              {formatAgo(session.lastSeen)} · {session.clientIp}
+              {formatAgo(session.lastSeen)} · {clientAddress(session)}
               {session.deployment?.imageName
                 ? ` · ${session.deployment.imageName}`
                 : session.bootImage

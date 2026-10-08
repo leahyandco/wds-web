@@ -344,19 +344,28 @@ public class BootActivityTests
     }
 
     [Fact]
-    public void Notes_a_client_wds_ignored_for_not_being_prestaged()
+    public void Notes_clients_wds_ignored_for_not_being_prestaged()
     {
-        var ignored = new WdsEventRecord(T0, BootActivity.NotRecognized, new Dictionary<string, string>
+        // As WDS logs them: before DHCP has given the client an address. Two machines take turns.
+        WdsEventRecord Ignored(int seconds, string mac) => new(T0.AddSeconds(seconds), BootActivity.NotRecognized, new Dictionary<string, string>
         {
-            ["ClientHardwareAddress"] = Mac,
-            ["ClientIP"] = Ip,
+            ["ClientHardwareAddress"] = mac,
+            ["ClientIP"] = "0.0.0.0",
+            ["ClientDeviceID"] = "{5C2A7E91-0B3D-4F68-A1C4-7D9E2B6F3A05}",
+            ["ClientArch"] = "4",
             ["ClientPrestaged"] = "false",
         });
+        const string other = "00-00-5E-00-53-02";
 
-        var session = Assert.Single(BootActivity.Build([ignored, ignored with { Time = T0.AddSeconds(4) }], T0.AddMinutes(1)));
+        var sessions = BootActivity.Build([Ignored(0, Mac), Ignored(2, other), Ignored(4, Mac), Ignored(6, other)], T0.AddMinutes(1));
 
-        Assert.Equal(BootNoteKind.NotRecognized, Assert.Single(session.Notes).Kind);
-        Assert.Equal(BootStatus.PxeOnly, session.Status);
+        Assert.Equal([other, Mac], sessions.Select(s => s.MacAddress));
+        Assert.All(sessions, session =>
+        {
+            Assert.Equal(BootNoteKind.NotRecognized, Assert.Single(session.Notes).Kind);
+            Assert.Equal(BootStatus.PxeOnly, session.Status);
+            Assert.Equal(BootActivity.Unaddressed, session.ClientIp);
+        });
     }
 
     // A WDS client event as client logging records it: the MAC address with every event.

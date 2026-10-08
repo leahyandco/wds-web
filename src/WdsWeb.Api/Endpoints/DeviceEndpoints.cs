@@ -20,5 +20,7 @@ public static class DeviceEndpoints
             wds.RunWdsUtilAsync([WdsDeviceCommands.Approve(id, approval)], ct));
         devices.MapPost("/requests/{id}/reject", (uint id, WdsScriptRunner wds, CancellationToken ct) =>
             wds.RunWdsUtilAsync([WdsDeviceCommands.Reject(id)], ct));
+        devices.MapPost("/requests/clear", (ClearedRequests cleared, WdsScriptRunner wds, CancellationToken ct) =>
+            wds.RunWdsUtilAsync(WdsDeviceCommands.Clear(cleared), ct));
     }
 }

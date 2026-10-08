@@ -3,7 +3,8 @@
 param([Parameter(Mandatory)] [object[]] $Commands)
 $ErrorActionPreference = 'Stop'
 
-$allowed = '/Set-Server', '/Set-TransportServer', '/Add-Device', '/Set-Device', '/Remove-Device', '/Approve-AutoAddDevices', '/Reject-AutoAddDevices'
+$allowed = '/Set-Server', '/Set-TransportServer', '/Add-Device', '/Set-Device', '/Remove-Device', '/Approve-AutoAddDevices', '/Reject-AutoAddDevices',
+    '/Delete-AutoAddDevices'
 
 $applied = @()
 foreach ($command in $Commands) {

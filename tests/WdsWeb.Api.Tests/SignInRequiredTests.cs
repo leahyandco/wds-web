@@ -40,6 +40,7 @@ public sealed class SignInRequiredTests(SignInRequiredTests.ProductionApp app) :
     [InlineData("DELETE", "/api/devices/PC-01")]
     [InlineData("POST", "/api/devices/requests/7/approve")]
     [InlineData("POST", "/api/devices/requests/7/reject")]
+    [InlineData("POST", "/api/devices/requests/clear")]
     [InlineData("PUT", "/api/boot-images/properties")]
     [InlineData("PUT", "/api/install-images/properties")]
     [InlineData("GET", "/api/install-images/unattend?name=Windows")]

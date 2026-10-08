@@ -1,15 +1,15 @@
-import { Alert, Anchor, Badge, Button, Card, Stack, Tabs, Text } from '@mantine/core'
+import { Alert, Anchor, Badge, Button, Card, Group, Stack, Tabs, Text } from '@mantine/core'
 import { IconAlertTriangle, IconInfoCircle, IconPlus } from '@tabler/icons-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useDevices } from '../api/queries'
 import type { WdsRecord } from '../api/types'
 import { DeviceEditor } from '../components/DeviceEditor'
-import { DeviceActionsMenu, RequestActionsMenu } from '../components/DeviceMenus'
+import { ClearRequestsButton, DeviceActionsMenu, RequestActionsMenu } from '../components/DeviceMenus'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { RecordTable, type RecordColumn } from '../components/RecordTable'
-import { devicePrompt } from '../lib/devices'
+import { approvedRequestFor, devicePrompt } from '../lib/devices'
 import { formatValue } from '../lib/format'
 import { pick } from '../lib/records'
 
@@ -32,7 +32,8 @@ const requestColumns: RecordColumn[] = [
     label: 'Status',
     render: (row) => (
       <Badge color={statusColors[String(row.Status)] ?? 'gray'} variant="light" tt="none">
-        {formatValue(row.Status)}
+        {/* What the console calls rejecting, WDS calls denying. */}
+        {row.Status === 'Denied' ? 'Rejected' : formatValue(row.Status)}
       </Badge>
     ),
   },
@@ -61,7 +62,17 @@ export function DevicesPage() {
     },
     { key: 'BootImagePath', label: 'Boot image' },
     { key: 'WdsClientUnattend', label: 'Client unattend' },
-    { key: 'actions', label: '', render: (row) => <DeviceActionsMenu device={row} onChange={() => setEditing(row)} /> },
+    {
+      key: 'actions',
+      label: '',
+      render: (row) => (
+        <DeviceActionsMenu
+          device={row}
+          approvedRequest={approvedRequestFor(row, query.data?.autoAdd ?? [])}
+          onChange={() => setEditing(row)}
+        />
+      ),
+    },
   ]
 
   return (
@@ -115,14 +126,21 @@ export function DevicesPage() {
                 </Tabs.Panel>
                 <Tabs.Panel value="requests" pt="md">
                   {devices.pendingPolicyEnabled ? (
-                    <Card withBorder p={0}>
-                      <RecordTable
-                        rows={devices.autoAdd}
-                        columns={requestColumns}
-                        empty="No requests. Unknown clients that PXE boot wait here for approval."
-                        detailTitle={(row) => String(pick(row, 'DeviceName', 'DeviceID') ?? 'Request')}
-                      />
-                    </Card>
+                    <Stack>
+                      {devices.autoAdd.some((request) => request.Status === 'Approved' || request.Status === 'Denied') && (
+                        <Group justify="flex-end">
+                          <ClearRequestsButton requests={devices.autoAdd} />
+                        </Group>
+                      )}
+                      <Card withBorder p={0}>
+                        <RecordTable
+                          rows={devices.autoAdd}
+                          columns={requestColumns}
+                          empty="No requests. Unknown clients that PXE boot wait here for approval."
+                          detailTitle={(row) => String(pick(row, 'DeviceName', 'DeviceID') ?? 'Request')}
+                        />
+                      </Card>
+                    </Stack>
                   ) : (
                     <Alert color="blue" icon={<IconInfoCircle />}>
                       The pending-device policy is off, so unknown clients boot without waiting for approval and nothing is listed

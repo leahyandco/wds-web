@@ -28,6 +28,9 @@ export const baseName = (path: string) => path.split('\\').pop() ?? path
 
 export const architectureLabel = (session: BootSession) => session.architecture ?? 'Unknown'
 
+/** WDS logs a client it ignored before DHCP gave it an address as 0.0.0.0. */
+export const clientAddress = (session: BootSession) => (session.clientIp === '0.0.0.0' ? 'No address yet' : session.clientIp)
+
 /** How long the boot image took to download, in seconds, when both ends were logged. */
 export function imageSeconds(session: BootSession): number | null {
   const image = session.transfers.findLast((t) => t.fileName === session.bootImage)

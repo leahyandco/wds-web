@@ -20,6 +20,16 @@ public class WdsDeviceCommandsTests
     }
 
     [Fact]
+    public void Clears_answered_requests_by_status()
+    {
+        Assert.Equal(
+            [["/Delete-AutoAddDevices", "/DeviceType:ApprovedDevices"], ["/Delete-AutoAddDevices", "/DeviceType:RejectedDevices"]],
+            WdsDeviceCommands.Clear(new ClearedRequests(Approved: true, Rejected: true)));
+        Assert.Equal([["/Delete-AutoAddDevices", "/DeviceType:RejectedDevices"]], WdsDeviceCommands.Clear(new ClearedRequests(false, true)));
+        Assert.Throws<InvalidRequestException>(() => WdsDeviceCommands.Clear(new ClearedRequests(false, false)));
+    }
+
+    [Fact]
     public void The_domain_join_is_said_only_when_chosen()
     {
         // WDS joins prestaged devices to the domain by default, which on a standalone server only fails.

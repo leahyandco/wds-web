@@ -89,6 +89,9 @@ public static partial class BootActivity
     public const int NotRecognized = 4132;
     public const int UnattendBlocked = 270;
 
+    /// <summary>The address WDS logs for a client it ignored before DHCP gave it one.</summary>
+    public const string Unaddressed = "0.0.0.0";
+
     private static readonly TimeSpan SessionGap = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan StalledAfter = TimeSpan.FromMinutes(15);
 
@@ -107,7 +110,10 @@ public static partial class BootActivity
         foreach (var record in events.OrderBy(e => e.Time))
         {
             if (record.Data.GetValueOrDefault("ClientIP") is not { Length: > 0 } ip) continue;
-            byIp.TryGetValue(ip, out var session);
+            // WDS ignores clients it doesn't answer before they have an address, logging them as 0.0.0.0, so
+            // those are told apart by MAC address.
+            var lookup = ip == Unaddressed ? $"{ip}/{MacKey(record.Data.GetValueOrDefault("ClientHardwareAddress"))}" : ip;
+            byIp.TryGetValue(lookup, out var session);
 
             if (DeploymentEvents.IsDeploymentEvent(record.Id))
             {
@@ -136,7 +142,7 @@ public static partial class BootActivity
                         // Prestaged (or removed) since its last try, so WDS answers it differently now.
                         (session.Prestaged is not null && prestaged is not null && session.Prestaged != prestaged))
                     {
-                        session = Start(ip, record.Time);
+                        session = Start(ip, record.Time, lookup: lookup);
                     }
                     session.MacAddress ??= mac;
                     session.DeviceId ??= record.Data.GetValueOrDefault("ClientDeviceID");
@@ -191,11 +197,12 @@ public static partial class BootActivity
         return sessions.OrderByDescending(s => s.FirstSeen).Select(s => s.Build(now)).ToList();
 
         // sameClientAs: the session this boot follows on from moments later, when the new boot's own PXE
-        // request (which says who the client is) wasn't logged.
-        Session Start(string ip, DateTimeOffset time, Session? sameClientAs = null)
+        // request (which says who the client is) wasn't logged. lookup: what to find the session by later,
+        // when not the address.
+        Session Start(string ip, DateTimeOffset time, Session? sameClientAs = null, string? lookup = null)
         {
             // Whatever the client was doing at this address before, it has stopped.
-            if (byIp.TryGetValue(ip, out var previous)) previous.Superseded = true;
+            if (byIp.TryGetValue(lookup ?? ip, out var previous)) previous.Superseded = true;
             var session = new Session(ip, time)
             {
                 MacAddress = sameClientAs?.MacAddress,
@@ -203,7 +210,7 @@ public static partial class BootActivity
                 ArchitectureCode = sameClientAs?.ArchitectureCode,
             };
             sessions.Add(session);
-            byIp[ip] = session;
+            byIp[lookup ?? ip] = session;
             return session;
         }
 

@@ -1,11 +1,11 @@
-import { ActionIcon, Alert, Button, Group, Loader, Menu, Modal, Select, Stack, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Alert, Button, Checkbox, Group, Loader, Menu, Modal, Select, Stack, Text, TextInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconAlertTriangle, IconCheck, IconDots, IconPencil, IconTrash, IconX } from '@tabler/icons-react'
+import { IconAlertTriangle, IconCheck, IconClearAll, IconDots, IconPencil, IconTrash, IconX } from '@tabler/icons-react'
 import { useState, type ReactNode } from 'react'
-import { useAnswerDeviceRequest, useBootImages, useRemoveDevice, useServerConfig } from '../api/queries'
+import { useAnswerDeviceRequest, useBootImages, useClearDeviceRequests, useRemoveDevice, useServerConfig } from '../api/queries'
 import type { WdsRecord } from '../api/types'
 import { bootImageChoices, isDeviceName } from '../lib/devices'
-import { asNumber } from '../lib/records'
+import { asNumber, asString } from '../lib/records'
 import { findValue } from '../lib/wdsutil'
 import { JoinDomainSwitch } from './DeviceEditor'
 
@@ -31,15 +31,25 @@ function RowMenu({ label, busy, children, dialogs }: { label: string; busy: bool
   )
 }
 
+interface DeviceActionsMenuProps {
+  device: WdsRecord
+  /** The approved request the device came from, if WDS still keeps it. */
+  approvedRequest?: WdsRecord
+  onChange: () => void
+}
+
 /** Change or remove one prestaged device; changing opens the page's device editor. */
-export function DeviceActionsMenu({ device, onChange }: { device: WdsRecord; onChange: () => void }) {
+export function DeviceActionsMenu({ device, approvedRequest, onChange }: DeviceActionsMenuProps) {
   const remove = useRemoveDevice()
+  const clear = useClearDeviceRequests()
   const [confirming, setConfirming] = useState(false)
+  const [clearApproved, setClearApproved] = useState(true)
   const name = String(device.DeviceName)
 
   const removeDevice = async () => {
     try {
       await remove.mutateAsync(name)
+      if (approvedRequest && clearApproved) await clear.mutateAsync({ approved: true, rejected: false })
       notifications.show({ color: 'green', message: `Removed ${name}` })
       setConfirming(false)
     } catch (error) {
@@ -50,18 +60,32 @@ export function DeviceActionsMenu({ device, onChange }: { device: WdsRecord; onC
   return (
     <RowMenu
       label={name}
-      busy={remove.isPending}
+      busy={remove.isPending || clear.isPending}
       dialogs={
         <Modal opened={confirming} onClose={() => setConfirming(false)} title={`Remove ${name}?`} centered>
           <Text size="sm">
             WDS forgets the device. The next time it PXE boots it's an unknown client, which WDS answers only if PXE response allows
             all clients.
           </Text>
+          {approvedRequest && (
+            <Stack gap="xs" mt="md">
+              <Text size="sm">
+                WDS still keeps the request this device was approved from (request {String(approvedRequest.RequestId)}). Until that
+                expires, WDS won't answer the device at all, not even to ask for approval again.
+              </Text>
+              <Checkbox
+                label="Also clear approved requests"
+                description="WDS can only clear them all at once. The devices approved from them stay prestaged."
+                checked={clearApproved}
+                onChange={(e) => setClearApproved(e.currentTarget.checked)}
+              />
+            </Stack>
+          )}
           <Group justify="flex-end" mt="lg">
             <Button variant="default" onClick={() => setConfirming(false)}>
               Cancel
             </Button>
-            <Button color="red" loading={remove.isPending} onClick={removeDevice}>
+            <Button color="red" loading={remove.isPending || clear.isPending} onClick={removeDevice}>
               Remove
             </Button>
           </Group>
@@ -85,7 +109,8 @@ export function RequestActionsMenu({ request }: { request: WdsRecord }) {
   const [dialog, setDialog] = useState<'approve' | 'reject' | null>(null)
   const requestId = asNumber(request.RequestId)
   if (requestId === null || request.Status !== 'Pending') return null
-  const label = String(request.DeviceName ?? request.DeviceID ?? `request ${requestId}`)
+  // WDS reports an unnamed request's name as an empty string.
+  const label = asString(request.DeviceName) || asString(request.DeviceID) || `request ${requestId}`
 
   const reject = async () => {
     try {
@@ -211,5 +236,75 @@ function ApproveForm({ requestId, label, onDone }: { requestId: number; label: s
         </Button>
       </Group>
     </Stack>
+  )
+}
+
+/**
+ * Deletes answered requests. WDS keeps them for the retention period and acts on them meanwhile: a rejected
+ * device is turned away, and one approved and since removed isn't answered at all.
+ */
+export function ClearRequestsButton({ requests }: { requests: WdsRecord[] }) {
+  const clear = useClearDeviceRequests()
+  const [opened, setOpened] = useState(false)
+  const approved = requests.filter((request) => request.Status === 'Approved').length
+  const rejected = requests.filter((request) => request.Status === 'Denied').length
+  const [choice, setChoice] = useState({ approved: false, rejected: true })
+  if (approved + rejected === 0) return null
+
+  const open = () => {
+    setChoice({ approved: false, rejected: rejected > 0 })
+    setOpened(true)
+  }
+  const confirm = async () => {
+    try {
+      await clear.mutateAsync({ approved: choice.approved && approved > 0, rejected: choice.rejected && rejected > 0 })
+      notifications.show({ color: 'green', message: 'Cleared the requests' })
+      setOpened(false)
+    } catch (error) {
+      failed("Couldn't clear the requests", error)
+    }
+  }
+
+  return (
+    <>
+      <Button variant="default" leftSection={<IconClearAll size={16} />} onClick={open}>
+        Clear answered requests…
+      </Button>
+      <Modal opened={opened} onClose={() => setOpened(false)} title="Clear answered requests" centered>
+        <Text size="sm">
+          WDS keeps answered requests for the retention period set under Pending devices, and acts on them: it turns away
+          rejected devices, and ignores devices that were approved and have since been removed. Clearing them lets those
+          devices ask again.
+        </Text>
+        <Stack gap="xs" mt="md">
+          <Checkbox
+            label={`Rejected (${rejected})`}
+            disabled={rejected === 0}
+            checked={choice.rejected && rejected > 0}
+            onChange={(e) => setChoice({ ...choice, rejected: e.currentTarget.checked })}
+          />
+          <Checkbox
+            label={`Approved (${approved})`}
+            description="The devices approved from them stay prestaged."
+            disabled={approved === 0}
+            checked={choice.approved && approved > 0}
+            onChange={(e) => setChoice({ ...choice, approved: e.currentTarget.checked })}
+          />
+        </Stack>
+        <Group justify="flex-end" mt="lg">
+          <Button variant="default" onClick={() => setOpened(false)}>
+            Cancel
+          </Button>
+          <Button
+            color="red"
+            loading={clear.isPending}
+            disabled={!((choice.rejected && rejected > 0) || (choice.approved && approved > 0))}
+            onClick={confirm}
+          >
+            Clear
+          </Button>
+        </Group>
+      </Modal>
+    </>
   )
 }

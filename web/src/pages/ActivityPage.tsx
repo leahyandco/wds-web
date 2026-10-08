@@ -9,7 +9,7 @@ import { DeploymentStageBadge } from '../components/DeploymentStageBadge'
 import { DeviceEditor } from '../components/DeviceEditor'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
-import { architectureLabel, baseName, bootStatus, imageSeconds } from '../lib/boot'
+import { architectureLabel, baseName, bootStatus, clientAddress, imageSeconds } from '../lib/boot'
 import { deploymentStage } from '../lib/deployments'
 import { EMPTY, formatAgo, formatBytes, formatDateTime } from '../lib/format'
 import { findValue, isYes } from '../lib/wdsutil'
@@ -152,7 +152,7 @@ function SessionTable({ sessions, unattendExpected, onSelect }: SessionTableProp
                     {session.macAddress ?? 'Unknown MAC'}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    {session.clientIp}
+                    {clientAddress(session)}
                   </Text>
                 </Table.Td>
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>
@@ -217,7 +217,7 @@ interface SessionDetailProps {
 function SessionDetail({ session, unattendExpected, standalone, onPrestage }: SessionDetailProps) {
   const facts: [string, string][] = [
     ['MAC address', session.macAddress ?? EMPTY],
-    ['IP address', session.clientIp],
+    ['IP address', clientAddress(session)],
     ['Device ID', session.deviceId ?? EMPTY],
     ['Architecture', architectureLabel(session)],
     ['Prestaged', session.prestaged == null ? EMPTY : session.prestaged ? 'Yes' : 'No'],

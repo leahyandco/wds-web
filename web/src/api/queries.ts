@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiSend } from './client'
 import type {
   ActivityResponse,
+  ClearedRequests,
   ConnectionInfo,
   ConsoleInfo,
   DeviceApproval,
@@ -257,6 +258,9 @@ export const useAnswerDeviceRequest = () =>
       ? apiSend('POST', `/devices/requests/${requestId}/reject`)
       : apiSend('POST', `/devices/requests/${requestId}/approve`, approval),
   )
+
+export const useClearDeviceRequests = () =>
+  useDeviceMutation((cleared: ClearedRequests) => apiSend('POST', '/devices/requests/clear', cleared))
 
 /** Allows or blocks hands-free deployment (the CVE-2026-0386 override). */
 export const useSetHandsFree = () => {

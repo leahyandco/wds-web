@@ -17,6 +17,20 @@ export const isGuid = (value: string) => /^\{?[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a
 
 export const isDeviceId = (value: string) => isMacAddress(value) || isGuid(value)
 
+/** The same MAC address or GUID, whatever the separators, braces or case. */
+const sameDeviceId = (a: unknown, b: unknown) => {
+  const hex = (value: unknown) => String(value ?? '').replace(/[^0-9a-f]/gi, '').toUpperCase()
+  return hex(a) !== '' && hex(a) === hex(b)
+}
+
+/** The approved request a prestaged device came from, while WDS still keeps it. */
+export const approvedRequestFor = (device: WdsRecord, requests: WdsRecord[]) =>
+  requests.find(
+    (request) =>
+      request.Status === 'Approved' &&
+      (sameDeviceId(request.DeviceID, device.DeviceID) || (!!request.DeviceName && sameText(String(request.DeviceName), String(device.DeviceName)))),
+  )
+
 /** Firmware that doesn't set an SMBIOS GUID reports all zeros or all Fs, which many machines then share. */
 export const isPlaceholderGuid = (value: string) => /^\{?(0{8}(-0{4}){3}-0{12}|f{8}(-f{4}){3}-f{12})\}?$/i.test(value.trim())
 

@@ -34,6 +34,13 @@ public sealed record DeviceChanges(
     string? WdsClientUnattend = null,
     bool? JoinDomain = null);
 
+/// <summary>
+/// Which answered requests to delete. WDS keeps them for the retention period, and while the pending-device
+/// policy is on it acts on them: a rejected device is turned away, and a device approved and since removed
+/// gets no answer at all.
+/// </summary>
+public sealed record ClearedRequests(bool Approved, bool Rejected);
+
 /// <summary>What to give a device when approving its request. Anything left out follows the server's settings.</summary>
 public sealed record DeviceApproval(string? Name = null, string? BootImagePath = null, string? WdsClientUnattend = null, bool? JoinDomain = null);
 
@@ -81,6 +88,15 @@ public static partial class WdsDeviceCommands
     }
 
     public static string[] Reject(uint requestId) => ["/Reject-AutoAddDevices", $"/RequestId:{RequestId(requestId)}"];
+
+    /// <remarks>WDS deletes requests only by status, never one at a time; the devices approved stay prestaged.</remarks>
+    public static string[][] Clear(ClearedRequests cleared)
+    {
+        List<string[]> commands = [];
+        if (cleared.Approved) commands.Add(["/Delete-AutoAddDevices", "/DeviceType:ApprovedDevices"]);
+        if (cleared.Rejected) commands.Add(["/Delete-AutoAddDevices", "/DeviceType:RejectedDevices"]);
+        return commands.Count > 0 ? [.. commands] : throw new InvalidRequestException("Say which requests to clear: approved, rejected or both.");
+    }
 
     /// <summary>
     /// A MAC address with dashes (WDSUTIL refuses colons) or a GUID in braces and capitals: how WDS
