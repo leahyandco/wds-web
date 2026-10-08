@@ -5,8 +5,8 @@ settings, and watch PXE boots and installs as they happen, from any browser inst
 snap-in on the server.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.jpg">
-  <img src="docs/images/dashboard-light.jpg" width="800" alt="The dashboard: the WDS service, image and device counts, recent boots with how far each install got, and problems from WDS's event logs">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
+  <img src="docs/images/dashboard-light.png" alt="The dashboard: the WDS service, image and device counts, recent boots with how far each install got, and problems from WDS's event logs">
 </picture>
 
 It runs as a Windows service, either on the WDS server itself or on another Windows machine on the
@@ -31,15 +31,15 @@ same network, and signs people in with their Windows accounts.
   <tr>
     <td width="50%">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/activity-dark.jpg">
-        <img src="docs/images/activity-light.jpg" alt="Boot activity: each PXE boot, its boot image download and the install that followed">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/activity-dark.png">
+        <img src="docs/images/activity-light.png" alt="Boot activity: each PXE boot, its boot image download and the install that followed">
       </picture>
       <b>Boot activity</b>: every PXE boot, what it downloaded, and how far its install got.
     </td>
     <td width="50%">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/install-detail-dark.jpg">
-        <img src="docs/images/install-detail-light.jpg" alt="One install's details: the image chosen, by whom, and a timeline from the WDS client's events">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/install-detail-dark.png">
+        <img src="docs/images/install-detail-light.png" alt="One install's details: the image chosen, by whom, and a timeline from the WDS client's events">
       </picture>
       <b>Install details</b>: the image chosen and by whom, with a timeline from the WDS client.
     </td>
@@ -47,15 +47,15 @@ same network, and signs people in with their Windows accounts.
   <tr>
     <td width="50%">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/boot-images-dark.jpg">
-        <img src="docs/images/boot-images-light.jpg" alt="Boot images, with their Windows version, architecture, size and status">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/boot-images-dark.png">
+        <img src="docs/images/boot-images-light.png" alt="Boot images, with their Windows version, architecture, size and status">
       </picture>
       <b>Boot images</b>: import, enable, disable, rename, reorder and remove.
     </td>
     <td width="50%">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/drivers-dark.jpg">
-        <img src="docs/images/drivers-light.jpg" alt="The driver store: packages by class, version and date, and the driver groups they're in">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/drivers-dark.png">
+        <img src="docs/images/drivers-light.png" alt="The driver store: packages by class, version and date, and the driver groups they're in">
       </picture>
       <b>Drivers</b>: the whole driver store, by group, class and provider.
     </td>
@@ -63,15 +63,15 @@ same network, and signs people in with their Windows accounts.
   <tr>
     <td width="50%">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/devices-dark.jpg">
-        <img src="docs/images/devices-light.jpg" alt="Devices waiting for approval, approved and rejected">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/devices-dark.png">
+        <img src="docs/images/devices-light.png" alt="Devices waiting for approval, approved and rejected">
       </picture>
       <b>Devices</b>: prestage devices, and approve or reject the ones waiting.
     </td>
     <td width="50%">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/server-settings-dark.jpg">
-        <img src="docs/images/server-settings-light.jpg" alt="Server settings: mode, PXE response, hands-free deployment, RemoteInstall space and every WDS policy">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/server-settings-dark.png">
+        <img src="docs/images/server-settings-light.png" alt="Server settings: mode, PXE response, hands-free deployment, RemoteInstall space and every WDS policy">
       </picture>
       <b>Server settings</b>: every WDS policy, editable a section at a time.
     </td>
@@ -231,8 +231,11 @@ npm run dev --prefix web                      # http://localhost:5173, proxies /
 ```
 
 Use `--launch-profile local` instead to manage WDS on the machine you're on, or `--launch-profile demo`
-to work on the frontend against the sample server, with no WDS anywhere. The README's screenshots are
-taken from the demo at 1200×900, in the light and dark themes.
+to work on the frontend against the sample server, with no WDS anywhere.
+
+The README's screenshots come from the demo. To retake them after changing the UI, build the frontend,
+start the demo (`dotnet run --project src/WdsWeb.Api --launch-profile demo`) and run
+`npm run screenshots --prefix web`, which drives Microsoft Edge headless at 1440×900 in both themes.
 
 Tests: `dotnet test WdsWeb.slnx`. Frontend checks: `npm run build --prefix web` and
 `npm run lint --prefix web`.
