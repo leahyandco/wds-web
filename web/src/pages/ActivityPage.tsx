@@ -233,22 +233,16 @@ function SessionDetail({ session, unattendExpected, standalone, onPrestage }: Se
           {bootStatus[session.status].description}
         </Text>
       </Group>
-      {session.notes
-        .filter((note) => note.kind === 'unattendBlocked')
-        .map((note) =>
-          unattendExpected ? (
+      {unattendExpected &&
+        session.notes
+          .filter((note) => note.kind === 'unattendBlocked')
+          .map((note) => (
             <Alert key={note.time} color="orange" icon={<IconAlertTriangle />} title="WDS refused the unattend request">
               At {formatDateTime(note.time)} Windows Setup asked for the WDS client unattend file, and WDS refused: hands-free
               deployment has been off since the April 2026 update (CVE-2026-0386). So the WDS client asked its questions
               (language, sign-in, which image) at the machine instead of taking the answers from the file.
             </Alert>
-          ) : (
-            <Alert key={note.time} color="gray" icon={<IconInfoCircle />}>
-              Windows Setup asked WDS for an unattend file, which WDS refuses since the April 2026 update (CVE-2026-0386). It
-              makes no difference here: WDS has no unattend file to give this client.
-            </Alert>
-          ),
-        )}
+          ))}
       {session.notes.some((note) => note.kind === 'notRecognized') && (
         <Alert color="orange" icon={<IconAlertTriangle />} title="WDS ignored this client">
           It isn't prestaged, and WDS answers only known clients. Prestage it below, or let WDS answer all clients under{' '}
@@ -281,6 +275,12 @@ function SessionDetail({ session, unattendExpected, standalone, onPrestage }: Se
           ))}
         </Table.Tbody>
       </Table>
+      {!unattendExpected && session.notes.some((note) => note.kind === 'unattendBlocked') && (
+        <Text size="xs" c="dimmed" mt="-sm">
+          Windows Setup asked WDS for an unattend file, which WDS refuses since the April 2026 update (CVE-2026-0386). That
+          makes no difference here: WDS has no unattend file to give this client.
+        </Text>
+      )}
 
       {session.deployment && <DeploymentDetail deployment={session.deployment} standalone={standalone} />}
 

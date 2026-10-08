@@ -16,11 +16,13 @@ same network, and signs people in with their Windows accounts.
 
 - **Boot and install images**: import from an upload or from an ISO, WIM or ESD already on the server;
   enable, disable, rename, reorder and remove images; give install images an unattend file.
-- **Devices**: prestage devices by MAC address or SMBIOS GUID, each with its own boot image, PXE prompt
-  and WDS client unattend file; approve or reject devices waiting for approval.
-- **Boot activity**: every PXE boot and what it downloaded, and with WDS client logging on, the install
-  that followed: which image was chosen, by whom, how long the download and apply took, and any errors.
-  Prestage a device straight from one of its boots.
+- **Devices**: prestage devices by MAC address or SMBIOS GUID, each with its own boot image, PXE prompt,
+  WDS client unattend file and domain join; approve or reject devices waiting for approval, and clear
+  the answered requests WDS would otherwise keep acting on.
+- **Boot activity**: every PXE boot, how far it got (the network boot prompt, the boot menu, the boot
+  image download) and what it downloaded, and with WDS client logging on, the install that followed:
+  which image was chosen, by whom, how long the apply took, and any errors. Prestage a device straight
+  from one of its boots.
 - **Server settings**: PXE response, boot programs and default boot images, the WDS client, pending
   devices, network interfaces, TFTP and multicast, and the hands-free deployment override.
 - **Drivers** and **events**: the whole driver store, and WDS's event logs without the routine noise.
