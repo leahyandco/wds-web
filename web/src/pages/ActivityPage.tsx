@@ -1,4 +1,4 @@
-import { Alert, Anchor, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, TextInput, Timeline, Title } from '@mantine/core'
+import { Alert, Anchor, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, TextInput, Timeline, Title, Tooltip } from '@mantine/core'
 import { IconAlertTriangle, IconDeviceDesktopPlus, IconDownload, IconInfoCircle, IconSearch } from '@tabler/icons-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
@@ -13,6 +13,7 @@ import { QueryState } from '../components/QueryState'
 import { architectureLabel, bootStatus, clientAddress, imageSeconds } from '../lib/boot'
 import { csvTime, datedName, downloadCsv } from '../lib/csv'
 import { deploymentStage } from '../lib/deployments'
+import { installErrorHint, tftpErrorHint } from '../lib/errors'
 import { bootImageName, prestagedDevice } from '../lib/devices'
 import { EMPTY, formatAgo, formatBytes, formatDateTime, formatDateTimeSeconds } from '../lib/format'
 import { useUrlParams } from '../lib/urlState'
@@ -436,6 +437,11 @@ function SessionDetail({ session, device, imageName, unattendExpected, standalon
         <Title order={5} mb="xs">
           TFTP downloads
         </Title>
+        {[...new Set(session.transfers.filter((t) => t.succeeded === false).map((t) => tftpErrorHint(t.errorCode)).filter(Boolean))].map((hint) => (
+          <Alert key={hint} color="red" icon={<IconAlertTriangle />} mb="xs">
+            {hint}
+          </Alert>
+        ))}
         {session.transfers.length === 0 ? (
           <Text size="sm" c="dimmed">
             None. The client made a PXE request but didn't download a boot program.
@@ -487,6 +493,11 @@ function DeploymentDetail({ deployment, standalone }: { deployment: Deployment; 
       {deployment.error && (
         <Alert color="red" icon={<IconAlertTriangle />} mb="sm">
           {deployment.error}
+          {installErrorHint(deployment.error) && (
+            <Text size="sm" mt={4} fw={500}>
+              {installErrorHint(deployment.error)}
+            </Text>
+          )}
           {deployment.domainJoinFailed && standalone && (
             <Text size="sm" mt={4}>
               This WDS server is standalone, so there's no domain to join. Turn off <i>Join the domain during setup</i> for the
@@ -568,9 +579,11 @@ function TransferTable({ transfers }: { transfers: TftpTransfer[] }) {
                   </Badge>
                 )}
                 {transfer.succeeded === false && (
-                  <Badge color="red" variant="light" tt="none">
-                    Failed{transfer.errorCode ? ` (${transfer.errorCode})` : ''}
-                  </Badge>
+                  <Tooltip label={tftpErrorHint(transfer.errorCode) ?? 'WDS logged the download as failed.'} multiline maw={320}>
+                    <Badge color="red" variant="light" tt="none">
+                      Failed{transfer.errorCode ? ` (${transfer.errorCode})` : ''}
+                    </Badge>
+                  </Tooltip>
                 )}
                 {transfer.succeeded == null && (
                   <Badge color="gray" variant="light" tt="none">

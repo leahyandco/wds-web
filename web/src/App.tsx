@@ -1,22 +1,24 @@
 import { Alert, Button, Center, Loader, Text } from '@mantine/core'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { lazy, useEffect, useState } from 'react'
 import { Route, Routes } from 'react-router'
 import { SIGNED_OUT_EVENT } from './api/client'
 import { useSession } from './api/queries'
 import type { SessionInfo } from './api/types'
 import { AppLayout } from './components/AppLayout'
-import { ActivityPage } from './pages/ActivityPage'
-import { BootImagesPage } from './pages/BootImagesPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { DevicesPage } from './pages/DevicesPage'
-import { DriversPage } from './pages/DriversPage'
-import { EventsPage } from './pages/EventsPage'
-import { InstallImagesPage } from './pages/InstallImagesPage'
-import { NotFoundPage } from './pages/NotFoundPage'
-import { ServerSettingsPage } from './pages/ServerSettingsPage'
 import { SignInAgain, SignInPage } from './pages/SignInPage'
+
+// Each page is its own chunk, loaded when it's first opened, so the console starts with less to download.
+const ActivityPage = lazy(() => import('./pages/ActivityPage').then((m) => ({ default: m.ActivityPage })))
+const BootImagesPage = lazy(() => import('./pages/BootImagesPage').then((m) => ({ default: m.BootImagesPage })))
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
+const DevicesPage = lazy(() => import('./pages/DevicesPage').then((m) => ({ default: m.DevicesPage })))
+const DriversPage = lazy(() => import('./pages/DriversPage').then((m) => ({ default: m.DriversPage })))
+const EventsPage = lazy(() => import('./pages/EventsPage').then((m) => ({ default: m.EventsPage })))
+const InstallImagesPage = lazy(() => import('./pages/InstallImagesPage').then((m) => ({ default: m.InstallImagesPage })))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })))
+const ServerSettingsPage = lazy(() => import('./pages/ServerSettingsPage').then((m) => ({ default: m.ServerSettingsPage })))
 
 export function App() {
   const session = useSession()

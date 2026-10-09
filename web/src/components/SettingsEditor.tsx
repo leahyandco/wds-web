@@ -18,7 +18,7 @@ import {
 import { notifications } from '@mantine/notifications'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useState, type ReactNode } from 'react'
-import { useApplySettings, useBootImages } from '../api/queries'
+import { useApplySettings, useBootImages, useRestartWds } from '../api/queries'
 import type { ServerConfig, SettingsGroup, WdsRecord } from '../api/types'
 import { formatDuration } from '../lib/format'
 import { ARCHITECTURES, bootFolder, bootsEfi, promptOptions, sameText } from '../lib/settings'
@@ -79,17 +79,49 @@ function SettingsForm({
   children: ReactNode
 }) {
   const apply = useApplySettings()
+  const restart = useRestartWds()
+  // What the form held when it opened: Save waits for a change from it.
+  const [initial] = useState(() => JSON.stringify(body))
+  const untouched = JSON.stringify(body) === initial
+
+  /** WDS listens on new interfaces only after a restart, so saving those offers one. */
+  const offerRestart = (title: string, said: string) => {
+    const id = notifications.show({
+      color: 'green',
+      title,
+      autoClose: false,
+      message: (
+        <>
+          <Text size="sm">{said} WDS uses the change once its service restarts.</Text>
+          <Button
+            size="compact-xs"
+            variant="light"
+            mt={6}
+            onClick={async () => {
+              notifications.hide(id)
+              try {
+                const restarted = await restart.mutateAsync()
+                notifications.show({ color: 'green', message: `The WDS service restarted and is ${restarted.status.toLowerCase()}.` })
+              } catch (error) {
+                notifications.show({ color: 'red', title: "Couldn't restart WDS", message: error instanceof Error ? error.message : String(error) })
+              }
+            }}
+          >
+            Restart WDS now
+          </Button>
+        </>
+      ),
+    })
+  }
 
   const save = async () => {
     try {
       const result = await apply.mutateAsync({ group, body })
       // WDSUTIL mostly just says it worked; show anything else it said, such as a restart being needed.
       const notes = result.applied.map((a) => a.message).filter((m) => m && !/completed successfully/i.test(m))
-      notifications.show({
-        color: 'green',
-        title: `${titles[group]} saved`,
-        message: notes.length > 0 ? notes.join(' ') : `WDSUTIL applied ${result.applied.length} change${result.applied.length === 1 ? '' : 's'}.`,
-      })
+      const said = notes.length > 0 ? notes.join(' ') : `WDSUTIL applied ${result.applied.length} change${result.applied.length === 1 ? '' : 's'}.`
+      if (group === 'bind') offerRestart(`${titles[group]} saved`, said)
+      else notifications.show({ color: 'green', title: `${titles[group]} saved`, message: said })
       onDone()
     } catch {
       // Shown from apply.error.
@@ -97,7 +129,7 @@ function SettingsForm({
   }
 
   return (
-    <DialogForm onSubmit={() => void save()} canSubmit={!unchanged && !problem}>
+    <DialogForm onSubmit={() => void save()} canSubmit={!unchanged && !untouched && !problem}>
       {children}
       {problem && (
         <Alert color="yellow" icon={<IconAlertTriangle />}>
@@ -113,7 +145,7 @@ function SettingsForm({
         <Button variant="default" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" loading={apply.isPending} disabled={unchanged || !!problem}>
+        <Button type="submit" loading={apply.isPending} disabled={unchanged || untouched || !!problem}>
           Save
         </Button>
       </Group>

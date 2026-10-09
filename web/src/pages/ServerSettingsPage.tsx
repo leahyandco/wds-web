@@ -1,8 +1,8 @@
-import { Accordion, Alert, Button, Card, Group, Modal, Progress, SimpleGrid, Stack, Text } from '@mantine/core'
+import { Accordion, Alert, Anchor, Button, Card, Code, Group, List, Modal, Progress, SimpleGrid, Stack, Text } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconAlertTriangle, IconPencil, IconRotateClockwise } from '@tabler/icons-react'
 import { useState } from 'react'
-import { useRestartWds, useServerConfig } from '../api/queries'
+import { useActivity, useDevices, useRestartWds, useServerConfig } from '../api/queries'
 import type { ServerConfig, SettingsGroup } from '../api/types'
 import { ConfigRows } from '../components/ConfigRows'
 import { ConsoleCard } from '../components/ConsoleCard'
@@ -12,9 +12,13 @@ import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { SettingsEditor } from '../components/SettingsEditor'
 import { StagedUploadsCard } from '../components/StagedUploadsCard'
+import { clientAddress } from '../lib/boot'
+import { deploymentStage } from '../lib/deployments'
+import { prestagedDevice } from '../lib/devices'
 import { EMPTY, formatBytes } from '../lib/format'
-import { editorFor } from '../lib/settings'
-import { findValue } from '../lib/wdsutil'
+import { ARCHITECTURES, editorFor } from '../lib/settings'
+import { useNow } from '../lib/useNow'
+import { findValue, isYes } from '../lib/wdsutil'
 
 export function ServerSettingsPage() {
   const query = useServerConfig()
@@ -101,11 +105,31 @@ function Settings({ config }: { config: ServerConfig }) {
         </Card>
       </SimpleGrid>
 
+      {/* A long page: jump straight to a policy. */}
+      <Group gap="xs" wrap="wrap">
+        <Text size="sm" c="dimmed">
+          Jump to:
+        </Text>
+        {policies.map((policy, index) => (
+          <Anchor
+            key={`${index}-${policy.name}`}
+            size="sm"
+            href={`#${policyId(policy.name)}`}
+            onClick={(event) => {
+              event.preventDefault()
+              document.getElementById(policyId(policy.name))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }}
+          >
+            {policy.name}
+          </Anchor>
+        ))}
+      </Group>
+
       <SimpleGrid cols={{ base: 1, lg: 2 }}>
         {policies.map((policy, index) => {
           const editor = editorFor(policy.name)
           return (
-            <Card key={`${index}-${policy.name}`} withBorder padding="md">
+            <Card key={`${index}-${policy.name}`} id={policyId(policy.name)} withBorder padding="md" style={{ scrollMarginTop: 72 }}>
               <Group justify="space-between" mb="xs" wrap="nowrap" align="flex-start">
                 <Text fw={600}>
                   {policy.name}
@@ -118,6 +142,7 @@ function Settings({ config }: { config: ServerConfig }) {
                 )}
               </Group>
               <ConfigRows nodes={policy.children} />
+              {policy.name === 'Pending Device Policy' && standalone === 'Yes' && <JoinDomainDefaults config={config} />}
             </Card>
           )
         })}
@@ -145,6 +170,15 @@ function Settings({ config }: { config: ServerConfig }) {
 
 function RestartDialog({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   const restart = useRestartWds()
+  const activity = useActivity(24)
+  const devices = useDevices()
+  // Clients a restart would cut off: downloading a boot image, or installing, and heard from lately.
+  const recent = useNow(60_000) - 30 * 60_000
+  const busy = (activity.data?.sessions ?? []).filter(
+    (session) =>
+      new Date(session.lastSeen).getTime() > recent &&
+      (session.status === 'downloading' || (session.deployment && session.deployment.stage !== 'finished' && session.deployment.stage !== 'failed')),
+  )
 
   const confirm = async () => {
     try {
@@ -163,6 +197,24 @@ function RestartDialog({ opened, onClose }: { opened: boolean; onClose: () => vo
           Any PXE boot or TFTP download in progress is cut off, and clients have to boot again. Some settings, such as network interface
           changes, only take effect after a restart.
         </Text>
+        {busy.length > 0 && (
+          <Alert color="orange" icon={<IconAlertTriangle />} title={`${busy.length === 1 ? 'A client is' : `${busy.length} clients are`} busy with WDS`}>
+            <List size="sm" spacing={2}>
+              {busy.map((session) => {
+                const device = prestagedDevice(devices.data?.prestaged ?? [], session.macAddress, session.deviceId)
+                return (
+                  <List.Item key={session.id}>
+                    {device ? String(device.DeviceName) : (session.macAddress ?? clientAddress(session))}:{' '}
+                    {session.deployment ? deploymentStage[session.deployment.stage].label.toLowerCase() : 'downloading a boot image'}
+                  </List.Item>
+                )
+              })}
+            </List>
+            <Text size="sm" mt={4}>
+              A restart now interrupts {busy.length === 1 ? 'it' : 'them'}.
+            </Text>
+          </Alert>
+        )}
         {restart.error && (
           <Alert color="red" icon={<IconAlertTriangle />}>
             {restart.error.message}
@@ -209,5 +261,30 @@ function Summary({ label, value, detail, onEdit }: { label: string; value: strin
         </Text>
       )}
     </Card>
+  )
+}
+
+/** The ID a policy's card goes by, for jumping to it: "Pending Device Policy" → "policy-pending-device-policy". */
+const policyId = (name: string) => `policy-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
+
+/**
+ * WDS's defaults for devices approved outside this console (in the WDS snap-in, say) join them to a domain,
+ * which a standalone server doesn't have, so their installs end with a failed join. Approving on the Devices
+ * page here turns joining off; the defaults can be changed with WDSUTIL.
+ */
+function JoinDomainDefaults({ config }: { config: ServerConfig }) {
+  const joining = ARCHITECTURES.filter((architecture) => isYes(findValue(config.sections, ['Pending Device Policy', `Defaults for ${architecture}`, 'Join domain'])))
+  if (joining.length === 0) return null
+  return (
+    <Alert color="orange" icon={<IconAlertTriangle />} mt="sm" title="Approved devices join a domain by default">
+      <Text size="sm">
+        This server is standalone, but its defaults for {joining.join(', ')} clients have devices approved elsewhere, such as in the WDS
+        snap-in, join a domain, so their installs end with a failed join. Devices approved on the Devices page here don't join. To change
+        the defaults, run this on the WDS server for each architecture:
+      </Text>
+      <Code block mt="xs">
+        {joining.map((architecture) => `wdsutil /Set-Server /AutoAddSettings /Architecture:${architecture} /JoinDomain:No`).join('\n')}
+      </Code>
+    </Alert>
   )
 }

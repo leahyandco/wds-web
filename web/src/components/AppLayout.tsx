@@ -4,6 +4,7 @@ import {
   Badge,
   Burger,
   Button,
+  Center,
   Group,
   Loader,
   Menu,
@@ -29,6 +30,7 @@ import {
   IconSun,
   IconUser,
 } from '@tabler/icons-react'
+import { Suspense } from 'react'
 import { Outlet, NavLink as RouterNavLink, useLocation } from 'react-router'
 import { useConnection, useConsoleInfo, useJobs, useSignOut, useTarget } from '../api/queries'
 import type { SessionInfo } from '../api/types'
@@ -96,7 +98,16 @@ export function AppLayout({ session }: { session: SessionInfo }) {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Outlet />
+        {/* While a page's code loads, the first time it's opened. */}
+        <Suspense
+          fallback={
+            <Center py="xl">
+              <Loader />
+            </Center>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </AppShell.Main>
       <JobWatcher />
     </AppShell>
