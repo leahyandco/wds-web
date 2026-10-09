@@ -28,7 +28,7 @@ public static class DemoWds
         "Get-DriverPackages" => Json(new { packages = DriverPackagesReport(now), groups = DriverGroupsReport(now) }),
         "Get-BootActivity" => Json(Activity(now)),
         "Get-Events" => Json(Events(now, parameters)),
-        "Find-ImageFiles" => Json(ImageFiles(now)),
+        "Find-ImageFiles" => Json(parameters?.GetValueOrDefault("Extensions") is string[] extensions && extensions.Contains(".zip") ? DriverFiles(now) : ImageFiles(now)),
         "Get-ImageFileInfo" => Json(ImageFileInfo(parameters?.GetValueOrDefault("Path") as string ?? @"C:\ISO\Win11_25H2_English_x64.iso")),
         "Get-WdsImageUnattend" => Json(Unattend(parameters?.GetValueOrDefault("Name") as string, parameters?.GetValueOrDefault("ImageGroup") as string)),
         _ => throw new InvalidRequestException(NothingChanges),
@@ -197,6 +197,13 @@ public static class DemoWds
         new { path = @"C:\Images\winpe-tools-x64.wim", size = 512_458_752L, modified = Iso(now.AddDays(-64)) },
     ];
 
+    private static object[] DriverFiles(DateTimeOffset now) =>
+    [
+        new { path = @"C:\Drivers\Dell\Latitude-5450-win11-A07.cab", size = 1_143_209_984L, modified = Iso(now.AddDays(-12)) },
+        new { path = @"C:\Drivers\HP\sp153542-EliteBook-840-G10.zip", size = 886_045_312L, modified = Iso(now.AddDays(-31)) },
+        new { path = @"C:\Users\jdoe\Downloads\Intel-I219-LM-29.2.zip", size = 4_718_592L, modified = Iso(now.AddDays(-3)) },
+    ];
+
     private static object ImageFileInfo(string path)
     {
         var server = path.Contains("Server", StringComparison.OrdinalIgnoreCase);
@@ -306,14 +313,18 @@ public static class DemoWds
         new("qcwlan64", "arm64", "Net", NetClass, "Qualcomm", "3.0.0.1312", new(2024, 4, 2), 21),
     ];
 
-    private static readonly (string Name, string Applicability, string[] Infs)[] DriverGroups =
+    // Filters as WDSUTIL's reports spell them: "Chassis Type" and "Mini Tower" for ChassisType and MiniTower.
+    private static readonly (string Name, string Applicability, string[] Infs, (string Type, string Policy, string[] Values)[] Filters)[] DriverGroups =
     [
-        ("Network adapters", "All", ["e1d68x64", "rt640x64", "Netwtw14"]),
-        ("Storage (Intel VMD)", "Matched", ["iaStorVD", "iaStorAC"]),
-        ("Dell Latitude 5450", "Matched", ["e1d68x64", "Netwtw14", "iaStorVD", "iigd_dch", "RTKVHD64", "ibtusb", "HidEventFilter"]),
-        ("HP EliteBook 840 G10", "Matched", ["Netwtw14", "iaStorVD", "iigd_dch", "TbtHostController", "SynPD"]),
-        ("Lenovo ThinkPad T14 Gen 5", "Matched", ["rt640x64", "amdgpio2", "RTKVHD64"]),
-        ("ARM64 devices", "Matched", ["qcwlan64"]),
+        ("Network adapters", "All", ["e1d68x64", "rt640x64", "Netwtw14"], []),
+        ("Storage (Intel VMD)", "Matched", ["iaStorVD", "iaStorAC"], []),
+        ("Dell Latitude 5450", "Matched", ["e1d68x64", "Netwtw14", "iaStorVD", "iigd_dch", "RTKVHD64", "ibtusb", "HidEventFilter"],
+            [("Manufacturer", "Include", ["Dell Inc."]), ("Model", "Include", ["Latitude 5450"])]),
+        ("HP EliteBook 840 G10", "Matched", ["Netwtw14", "iaStorVD", "iigd_dch", "TbtHostController", "SynPD"],
+            [("Manufacturer", "Include", ["HP"]), ("Model", "Include", ["HP EliteBook 840 14 inch G10 Notebook PC"])]),
+        ("Lenovo ThinkPad T14 Gen 5", "Matched", ["rt640x64", "amdgpio2", "RTKVHD64"],
+            [("Manufacturer", "Include", ["LENOVO"]), ("Model", "Include", ["21ML", "21MM"])]),
+        ("ARM64 devices", "Matched", ["qcwlan64"], [("Chassis Type", "Exclude", ["Desktop", "Mini Tower", "Tower"])]),
     ];
 
     private static string DriverPackagesReport(DateTimeOffset now)
@@ -327,7 +338,7 @@ public static class DemoWds
     private static string DriverGroupsReport(DateTimeOffset now)
     {
         var text = new StringBuilder(Banner);
-        foreach (var (name, applicability, infs) in DriverGroups)
+        foreach (var (name, applicability, infs, filters) in DriverGroups)
         {
             text.Append($"""
 
@@ -345,7 +356,13 @@ public static class DemoWds
 
                 """);
             foreach (var inf in infs) text.Append(PackageBlock(Drivers.First(d => d.Inf == inf), now));
-            text.Append($"\n===============================================================================\nTotal number of driver packages: {infs.Length}\n--------\n\n");
+            text.Append($"\n===============================================================================\nTotal number of driver packages: {infs.Length}\n--------\n\nDriver Group Filters:\n-----------------------------------------\n");
+            foreach (var (type, policy, values) in filters)
+            {
+                text.Append($"\n-----------------------------------\nFilter Type: {type}\n-----------------------------------\n     Filter policy = {policy}\n");
+                for (var i = 0; i < values.Length; i++) text.Append($"     Value [{i + 1}] = {values[i]}\n");
+            }
+            text.Append($"\n===============================================================================\nTotal number of driver group filters: {filters.Length}\n--------\n\n");
         }
         text.Append($"\n===============================================================================\nTotal number of driver groups: {DriverGroups.Length}\n--------\n\nThe command completed successfully.\n");
         return text.ToString();

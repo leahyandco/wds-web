@@ -66,13 +66,14 @@ public sealed class WdsScriptRunner(WdsSessionPool pool, IOptions<WdsOptions> op
     /// Runs WDSUTIL commands that the caller built and validated, in order, stopping at the first that
     /// fails. Never retried: an earlier command may already have changed the server.
     /// </summary>
-    public Task<JsonElement> RunWdsUtilAsync(IReadOnlyList<string[]> commands, CancellationToken ct = default)
+    /// <param name="timeout">For long runs of commands; otherwise the usual command timeout.</param>
+    public Task<JsonElement> RunWdsUtilAsync(IReadOnlyList<string[]> commands, CancellationToken ct = default, TimeSpan? timeout = null)
     {
         if (commands.Count == 0) throw new InvalidRequestException("There's nothing to change.");
         return RunAsync("Invoke-WdsUtilCommands", new Dictionary<string, object?>
         {
             ["Commands"] = commands.Cast<object>().ToArray(),
-        }, retryOnBrokenSession: false, ct: ct);
+        }, retryOnBrokenSession: false, timeout: timeout, ct: ct);
     }
 
     /// <summary>

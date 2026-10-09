@@ -25,7 +25,10 @@ same network, and signs people in with their Windows accounts.
   from one of its boots.
 - **Server settings**: PXE response, boot programs and default boot images, the WDS client, pending
   devices, network interfaces, TFTP and multicast, and the hands-free deployment override.
-- **Drivers** and **events**: the whole driver store, and WDS's event logs without the routine noise.
+- **Drivers**: add drivers from an uploaded .zip or .cab, or a folder on the server, a driver group at a
+  time; create driver groups and choose which clients get them with filters on manufacturer, model,
+  chassis type and more; enable, disable, rename, regroup and remove packages, one or many at once.
+- **Events**: WDS's event logs, without the routine noise.
 - **Access control and audit**: Windows sign-in for the groups and users you choose, and every change
   recorded, with who made it, in the Windows event log.
 
@@ -57,9 +60,9 @@ same network, and signs people in with their Windows accounts.
     <td width="50%">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/drivers-dark.png">
-        <img src="docs/images/drivers-light.png" alt="The driver store: packages by class, version and date, and the driver groups they're in">
+        <img src="docs/images/drivers-light.png" alt="The driver store: driver groups with their filters, and packages by class, version and date">
       </picture>
-      <b>Drivers</b>: the whole driver store, by group, class and provider.
+      <b>Drivers</b>: add drivers, group them, and choose which clients get each group.
     </td>
   </tr>
   <tr>

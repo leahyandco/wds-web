@@ -9,14 +9,19 @@ import type {
   DeviceChanges,
   Devices,
   DriverCatalog,
+  DriverGroupChanges,
+  DriverPackageBatch,
+  DriverPackageChanges,
   EventsResponse,
   ImageFileInfo,
   ImageKind,
   ImageUnattend,
+  ImportDriversBody,
   ImportJob,
   ImportRequestBody,
   InstallImages,
   NewDevice,
+  NewDriverGroup,
   ServerConfig,
   ServerImageFile,
   SessionInfo,
@@ -153,6 +158,45 @@ export const useStartImport = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
   })
 }
+
+/** .zip and .cab files of drivers already on the WDS server. */
+export const useServerDriverFiles = (enabled: boolean) =>
+  useQuery({
+    queryKey: ['driver-files'],
+    queryFn: ({ signal }) => apiGet<ServerImageFile[]>('/drivers/files', signal),
+    enabled,
+  })
+
+export const useImportDrivers = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: ImportDriversBody) => apiSend<ImportJob>('POST', '/drivers/import', request),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+}
+
+/** A change to the driver store, refreshing it once it's made. */
+const useDriverMutation = <T>(mutationFn: (input: T) => Promise<unknown>) => {
+  const queryClient = useQueryClient()
+  return useMutation({ mutationFn, onSuccess: () => queryClient.invalidateQueries({ queryKey: ['drivers'] }) })
+}
+
+export const useAddDriverGroup = () => useDriverMutation((group: NewDriverGroup) => apiSend('POST', '/drivers/groups', group))
+
+export const useChangeDriverGroup = () =>
+  useDriverMutation(({ name, changes }: { name: string; changes: DriverGroupChanges }) =>
+    apiSend('PUT', `/drivers/groups/${encodeURIComponent(name)}`, changes),
+  )
+
+export const useRemoveDriverGroup = () =>
+  useDriverMutation((name: string) => apiSend('DELETE', `/drivers/groups/${encodeURIComponent(name)}`))
+
+export const useChangeDriverPackage = () =>
+  useDriverMutation(({ id, changes }: { id: string; changes: DriverPackageChanges }) =>
+    apiSend('PUT', `/drivers/packages/${encodeURIComponent(id)}`, changes),
+  )
+
+export const useDriverPackageBatch = () => useDriverMutation((batch: DriverPackageBatch) => apiSend('POST', '/drivers/packages/batch', batch))
 
 export type ImageAction = 'enable' | 'disable' | 'remove'
 

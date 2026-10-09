@@ -25,6 +25,7 @@ settings from another file, point the `WDSWEB_SETTINGS` environment variable at 
 | `StagingPath` | `C:\WdsWeb\Staging` | A folder on the WDS server for uploads and for temporary files during imports. It must be on a local drive of the WDS server, outside RemoteInstall. |
 | `StagingShare` | the server's `C$` share | Remote mode: a share that reaches `StagingPath` from the console's machine, such as `\\wds01\WdsStaging`, for servers whose administrative shares are turned off. |
 | `ImageSearchPaths` | `C:\Users\*\Downloads`, `C:\ISO`, `C:\ISOs`, `C:\Images` | Folders on the WDS server whose .iso, .wim and .esd files are offered for import. Wildcards are allowed. |
+| `DriverSearchPaths` | `C:\Users\*\Downloads`, `C:\Drivers` | Folders on the WDS server whose .zip and .cab files are offered when adding drivers. Wildcards are allowed. Any folder, .zip, .cab or .inf on the server can still be typed in. |
 | `PoolSize` | `3` | How many PowerShell sessions to keep open on the WDS server. |
 | `CommandTimeout` | `00:02:00` | How long one WDS command may take. |
 | `JobTimeout` | `03:00:00` | How long one import may take. |

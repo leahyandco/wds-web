@@ -34,6 +34,8 @@ public class WdsScriptsTests
     [InlineData("Find-ImageFiles")]
     [InlineData("Get-ImageFileInfo")]
     [InlineData("Import-WdsImage")]
+    [InlineData("Import-WdsDrivers")]
+    [InlineData("Get-DriverGroup")]
     [InlineData("Invoke-WdsImageAction")]
     [InlineData("Invoke-WdsUtilCommands")]
     [InlineData("Set-WdsImageProperties")]

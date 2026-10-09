@@ -43,6 +43,48 @@ public sealed class ImportValidationTests : IDisposable
     }
 
     [Fact]
+    public async Task Adds_drivers_from_an_uploaded_zip_into_a_new_group()
+    {
+        var upload = _uploads.Create("Latitude-5450.zip", 3);
+        await _uploads.AppendAsync(upload.Id, 0, new MemoryStream([1, 2, 3]), CancellationToken.None);
+
+        var request = ImportValidation.ValidateDrivers(
+            new ImportDriversRequest(upload.Id, null, " Latitude 5450 ", CreateGroup: true, "X64", DeleteUploadAfter: true), _uploads, "CONTOSO\\jdoe");
+
+        Assert.Equal(upload.ServerPath, request.SourcePath);
+        Assert.Equal(("Latitude 5450", true, "x64", true), (request.DriverGroup, request.CreateGroup, request.Architecture, request.DeleteUploadAfter));
+        Assert.Equal(("Latitude-5450.zip", "drivers"), (request.Name, request.Kind));
+    }
+
+    [Fact]
+    public void Adds_drivers_from_a_folder_on_the_server_into_no_group()
+    {
+        var request = ImportValidation.ValidateDrivers(new ImportDriversRequest(null, @"C:\Drivers\Intel NIC\", "", true, null, true), _uploads);
+
+        Assert.Equal((@"C:\Drivers\Intel NIC\", "Intel NIC"), (request.SourcePath, request.Name));
+        // No group, so nothing to create; and nothing uploaded, so nothing to delete.
+        Assert.Equal((null, false, null, false), (request.DriverGroup, request.CreateGroup, request.Architecture, request.DeleteUploadAfter));
+    }
+
+    [Fact]
+    public void Drivers_are_uploaded_as_a_zip_or_cab()
+    {
+        var upload = _uploads.Create("boot.wim", 3);
+
+        Assert.Throws<InvalidRequestException>(() => ImportValidation.ValidateDrivers(new ImportDriversRequest(upload.Id, null, null, false, null, false), _uploads));
+    }
+
+    [Theory]
+    [InlineData(@"Drivers\Dell.zip", null, null)]
+    [InlineData(@"C:\Drivers\..\Windows", null, null)]
+    [InlineData(@"C:\Drivers\Dell.zip", "Dell/HP", null)]
+    [InlineData(@"C:\Drivers\Dell.zip", null, "amd64")]
+    public void Refuses_drivers_from_a_bad_path_or_into_a_bad_group(string path, string? group, string? architecture)
+    {
+        Assert.Throws<InvalidRequestException>(() => ImportValidation.ValidateDrivers(new ImportDriversRequest(null, path, group, true, architecture, false), _uploads));
+    }
+
+    [Fact]
     public async Task Takes_the_source_from_a_finished_upload()
     {
         var upload = _uploads.Create("boot.wim", 3);

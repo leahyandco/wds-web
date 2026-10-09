@@ -144,6 +144,7 @@ audited.MapWdsEndpoints();
 audited.MapImageEndpoints();
 audited.MapSettingsEndpoints();
 audited.MapDeviceEndpoints();
+audited.MapDriverEndpoints();
 app.MapFallbackToFile("index.html", staticFiles).AllowAnonymous();
 
 app.Run();

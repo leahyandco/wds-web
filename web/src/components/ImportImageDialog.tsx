@@ -3,11 +3,9 @@ import {
   Badge,
   Button,
   Checkbox,
-  FileInput,
   Group,
   Loader,
   Modal,
-  Progress,
   Radio,
   ScrollArea,
   SegmentedControl,
@@ -17,16 +15,15 @@ import {
   Text,
   TextInput,
   Textarea,
-  UnstyledButton,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconAlertTriangle, IconFileUpload } from '@tabler/icons-react'
-import { useEffect, useRef, useState } from 'react'
+import { IconAlertTriangle } from '@tabler/icons-react'
+import { useState } from 'react'
 import { useInspectImage, useServerConfig, useServerImageFiles, useStartImport } from '../api/queries'
 import type { ImageEntry, ImageFileEntry, ImageFileInfo, ImageKind, UploadInfo } from '../api/types'
-import { formatBytes, formatDateTime, formatDuration, suggestFileName } from '../lib/format'
-import { uploadFile, type UploadProgress } from '../lib/upload'
+import { formatBytes, suggestFileName } from '../lib/format'
 import { releaseTag, windowsRelease } from '../lib/windows'
+import { ServerFilePanel, UploadPanel } from './SourcePanels'
 
 const GIB = 1024 ** 3
 const NEW_GROUP = '\u0000new'
@@ -121,6 +118,7 @@ function defaultSelection(info: ImageFileInfo, kind: ImageKind): Selection | nul
 
 function SourceStep({ onChosen, reading, error }: { onChosen: (source: Source) => void; reading: boolean; error: string | null }) {
   const [mode, setMode] = useState<'upload' | 'server'>('upload')
+  const files = useServerImageFiles(mode === 'server')
   return (
     <Stack mt="md">
       <SegmentedControl
@@ -133,9 +131,23 @@ function SourceStep({ onChosen, reading, error }: { onChosen: (source: Source) =
         disabled={reading}
       />
       {mode === 'upload' ? (
-        <UploadPanel onUploaded={(upload) => onChosen({ upload })} disabled={reading} />
+        <UploadPanel
+          accept=".iso,.wim,.esd"
+          label="Image file"
+          placeholder="Choose an .iso, .wim or .esd"
+          action="Upload and read"
+          onUploaded={(upload) => onChosen({ upload })}
+          disabled={reading}
+        />
       ) : (
-        <ServerFilePanel onPick={(serverPath) => onChosen({ serverPath })} disabled={reading} />
+        <ServerFilePanel
+          files={files}
+          placeholder="C:\ISO\Windows11.iso"
+          found={(count) => `${count} .iso, .wim and .esd files found in the server's Downloads and ISO folders. Pick one, or type any path.`}
+          action="Read image"
+          onPick={(serverPath) => onChosen({ serverPath })}
+          disabled={reading}
+        />
       )}
       {reading && (
         <Group gap="sm">
@@ -148,164 +160,6 @@ function SourceStep({ onChosen, reading, error }: { onChosen: (source: Source) =
           {error}
         </Alert>
       )}
-    </Stack>
-  )
-}
-
-function UploadPanel({ onUploaded, disabled }: { onUploaded: (upload: UploadInfo) => void; disabled: boolean }) {
-  const [file, setFile] = useState<File | null>(null)
-  const [progress, setProgress] = useState<UploadProgress | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const controller = useRef<AbortController | null>(null)
-  const config = useServerConfig()
-
-  // Closing the dialog stops the upload. What arrived so far stays on the server, and choosing the
-  // same file again carries on from there.
-  useEffect(() => () => controller.current?.abort(), [])
-
-  const start = async () => {
-    if (!file) return
-    const abort = new AbortController()
-    controller.current = abort
-    setUploading(true)
-    setError(null)
-    setProgress({ sent: 0, total: file.size, bytesPerSecond: null, retrying: false })
-    try {
-      onUploaded(await uploadFile(file, setProgress, abort.signal))
-    } catch (e) {
-      if (!abort.signal.aborted) setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const free = config.data?.remoteInstall?.freeBytes
-  const tight = file != null && free != null && file.size > free - 2 * GIB
-  const percent = progress ? (progress.sent / progress.total) * 100 : 0
-  const secondsLeft = progress?.bytesPerSecond ? (progress.total - progress.sent) / progress.bytesPerSecond : null
-
-  return (
-    <Stack>
-      <FileInput
-        label="Image file"
-        placeholder="Choose an .iso, .wim or .esd"
-        accept=".iso,.wim,.esd"
-        value={file}
-        onChange={(chosen) => {
-          setFile(chosen)
-          setProgress(null)
-          setError(null)
-        }}
-        disabled={uploading || disabled}
-        leftSection={<IconFileUpload size={16} />}
-        clearable
-      />
-      {file && (
-        <Text size="xs" c="dimmed">
-          {formatBytes(file.size)}
-          {free != null && ` · ${formatBytes(free)} free on the WDS server`}
-        </Text>
-      )}
-      {tight && (
-        <Alert color="red" icon={<IconAlertTriangle />}>
-          The WDS server doesn't have room for this file: it needs {formatBytes(file!.size)} plus 2 GB to spare, and{' '}
-          {formatBytes(free!)} is free.
-        </Alert>
-      )}
-      {progress && (
-        <div>
-          <Progress value={percent} animated={uploading} />
-          <Group justify="space-between" mt={4}>
-            <Text size="xs" c="dimmed">
-              {formatBytes(progress.sent)} of {formatBytes(progress.total)}
-            </Text>
-            <Text size="xs" c={progress.retrying ? 'yellow' : 'dimmed'}>
-              {progress.retrying
-                ? 'Connection lost, retrying…'
-                : progress.bytesPerSecond && secondsLeft != null
-                  ? `${formatBytes(progress.bytesPerSecond)}/s · ${formatDuration(secondsLeft)} left`
-                  : ''}
-            </Text>
-          </Group>
-        </div>
-      )}
-      {error && (
-        <Alert color="red" icon={<IconAlertTriangle />}>
-          {error}
-        </Alert>
-      )}
-      <Group justify="flex-end">
-        {uploading ? (
-          <Button variant="default" onClick={() => controller.current?.abort()}>
-            Stop upload
-          </Button>
-        ) : (
-          <Button onClick={start} disabled={!file || tight || disabled}>
-            Upload and read
-          </Button>
-        )}
-      </Group>
-    </Stack>
-  )
-}
-
-function ServerFilePanel({ onPick, disabled }: { onPick: (path: string) => void; disabled: boolean }) {
-  const files = useServerImageFiles(true)
-  const [path, setPath] = useState('')
-  const needle = path.trim().toLowerCase()
-  const matches = (files.data ?? []).filter((f) => !needle || f.path.toLowerCase().includes(needle)).slice(0, 100)
-
-  return (
-    <Stack>
-      <TextInput
-        label="Path on the WDS server"
-        placeholder="C:\ISO\Windows11.iso"
-        value={path}
-        onChange={(event) => setPath(event.currentTarget.value)}
-        disabled={disabled}
-      />
-      <Text size="xs" c="dimmed">
-        {files.isPending
-          ? 'Looking for image files on the server…'
-          : files.isError
-            ? `Couldn't list image files: ${files.error.message}`
-            : `${files.data?.length ?? 0} .iso, .wim and .esd files found in the server's Downloads and ISO folders. Pick one, or type any path.`}
-      </Text>
-      {matches.length > 0 && (
-        <ScrollArea.Autosize mah={260} type="auto">
-          <Stack gap={2}>
-            {matches.map((file) => {
-              const slash = file.path.lastIndexOf('\\')
-              const chosen = file.path === path
-              return (
-                <UnstyledButton
-                  key={file.path}
-                  onClick={() => setPath(file.path)}
-                  px="sm"
-                  py={6}
-                  style={{
-                    borderRadius: 'var(--mantine-radius-sm)',
-                    background: chosen ? 'var(--mantine-primary-color-light)' : undefined,
-                  }}
-                >
-                  <Text size="sm" fw={500} style={{ wordBreak: 'break-all' }}>
-                    {file.path.slice(slash + 1)}
-                  </Text>
-                  <Text size="xs" c="dimmed" style={{ wordBreak: 'break-all' }}>
-                    {file.path.slice(0, slash)} · {formatBytes(file.size)} · {formatDateTime(file.modified)}
-                  </Text>
-                </UnstyledButton>
-              )
-            })}
-          </Stack>
-        </ScrollArea.Autosize>
-      )}
-      <Group justify="flex-end">
-        <Button onClick={() => onPick(path.trim())} disabled={!path.trim() || disabled}>
-          Read image
-        </Button>
-      </Group>
     </Stack>
   )
 }

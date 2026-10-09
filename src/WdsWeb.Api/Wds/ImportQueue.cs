@@ -9,11 +9,24 @@ public enum ImageKind { Boot, Install }
 
 public enum JobStatus { Queued, Running, Succeeded, Failed }
 
+/// <summary>Something the queue imports: an image, or drivers.</summary>
+public interface IImportRequest
+{
+    /// <summary>What the import is called in the job list.</summary>
+    string Name { get; }
+
+    /// <summary>The upload the source came from, if any, so it can be deleted afterwards.</summary>
+    string? UploadId { get; }
+
+    bool DeleteUploadAfter { get; }
+
+    /// <summary>The signed-in user who asked for the import.</summary>
+    string? RequestedBy { get; }
+}
+
 /// <param name="SourcePath">The .wim, .esd or .iso, as a path on the WDS server.</param>
 /// <param name="InnerPath">For an ISO, the image file inside it, e.g. sources\install.wim.</param>
 /// <param name="Index">Which image in the file (1-based).</param>
-/// <param name="UploadId">The upload the source came from, if any, so it can be deleted afterwards.</param>
-/// <param name="RequestedBy">The signed-in user who asked for the import.</param>
 public sealed record ImportRequest(
     string SourcePath,
     string? InnerPath,
@@ -26,13 +39,34 @@ public sealed record ImportRequest(
     string FileName,
     string? UploadId,
     bool DeleteUploadAfter,
-    string? RequestedBy = null);
+    string? RequestedBy = null) : IImportRequest;
+
+/// <param name="SourcePath">A .zip or .cab of drivers, a folder of them, or one .inf, as a path on the WDS server.</param>
+/// <param name="DriverGroup">The driver group to put the packages in, if any.</param>
+/// <param name="CreateGroup">Create the driver group if there's none of that name.</param>
+/// <param name="Architecture">Only add drivers for this architecture (x86, x64, arm or arm64); null for all.</param>
+public sealed record DriverImportRequest(
+    string SourcePath,
+    string? DriverGroup,
+    bool CreateGroup,
+    string? Architecture,
+    string? UploadId,
+    bool DeleteUploadAfter,
+    string? RequestedBy = null) : IImportRequest
+{
+    /// <summary>Tells drivers apart in the job list, as an image import's kind says boot or install.</summary>
+    public string Kind => "drivers";
+
+    /// <summary>The file or folder the drivers come from.</summary>
+    public string Name => Path.GetFileName(SourcePath.TrimEnd('\\')) is { Length: > 0 } name ? name : SourcePath;
+}
 
 public sealed record JobLogLine(DateTimeOffset Time, string Text);
 
+/// <param name="Request">An <see cref="ImportRequest"/> or a <see cref="DriverImportRequest"/>, as itself.</param>
 public sealed record ImportJobView(
     string Id,
-    ImportRequest Request,
+    object Request,
     JobStatus Status,
     string? Stage,
     int? Percent,
@@ -44,9 +78,9 @@ public sealed record ImportJobView(
     JsonElement? Result);
 
 /// <summary>
-/// Runs image imports one at a time, in the order they were asked for. WDS handles one import at a
-/// time best, and each can take many minutes, so an import runs here in the background and the
-/// UI follows it through <see cref="Get"/>. Jobs are kept in memory, so a restart forgets them.
+/// Runs image and driver imports one at a time, in the order they were asked for. WDS handles one
+/// import at a time best, and each can take many minutes, so an import runs here in the background and
+/// the UI follows it through <see cref="Get"/>. Jobs are kept in memory, so a restart forgets them.
 /// </summary>
 public sealed class ImportQueue(
     WdsScriptRunner wds,
@@ -58,7 +92,7 @@ public sealed class ImportQueue(
     private readonly Channel<Job> _pending = Channel.CreateUnbounded<Job>();
     private readonly ConcurrentDictionary<string, Job> _jobs = new();
 
-    public ImportJobView Enqueue(ImportRequest request)
+    public ImportJobView Enqueue(IImportRequest request)
     {
         var job = new Job(Guid.NewGuid().ToString("N"), request);
         _jobs[job.Id] = job;
@@ -83,22 +117,46 @@ public sealed class ImportQueue(
         var request = job.Request;
         job.Start();
         if (request.RequestedBy is not null) job.Message($"Requested by {request.RequestedBy}");
-        logger.LogInformation("Importing {Kind} image {Name} from {Source} for {User}", request.Kind, request.Name, request.SourcePath, request.RequestedBy);
+        var tempFolder = staging.ToServerPath(Path.Combine(staging.TempFolder, job.Id));
         try
         {
-            var result = await wds.RunJobAsync("Import-WdsImage", new Dictionary<string, object?>
+            JsonElement result;
+            string? summary = null;
+            switch (request)
             {
-                ["Path"] = request.SourcePath,
-                ["InnerPath"] = request.InnerPath,
-                ["Kind"] = request.Kind.ToString(),
-                ["Index"] = request.Index,
-                ["ImageGroup"] = request.ImageGroup,
-                ["CreateGroup"] = request.CreateGroup,
-                ["Name"] = request.Name,
-                ["Description"] = request.Description,
-                ["FileName"] = request.FileName,
-                ["TempFolder"] = staging.ToServerPath(Path.Combine(staging.TempFolder, job.Id)),
-            }, job.Message, job.Progress, ct);
+                case ImportRequest image:
+                    logger.LogInformation("Importing {Kind} image {Name} from {Source} for {User}", image.Kind, image.Name, image.SourcePath, image.RequestedBy);
+                    result = await wds.RunJobAsync("Import-WdsImage", new Dictionary<string, object?>
+                    {
+                        ["Path"] = image.SourcePath,
+                        ["InnerPath"] = image.InnerPath,
+                        ["Kind"] = image.Kind.ToString(),
+                        ["Index"] = image.Index,
+                        ["ImageGroup"] = image.ImageGroup,
+                        ["CreateGroup"] = image.CreateGroup,
+                        ["Name"] = image.Name,
+                        ["Description"] = image.Description,
+                        ["FileName"] = image.FileName,
+                        ["TempFolder"] = tempFolder,
+                    }, job.Message, job.Progress, ct);
+                    break;
+
+                case DriverImportRequest drivers:
+                    logger.LogInformation("Adding drivers from {Source} to {Group} for {User}", drivers.SourcePath, drivers.DriverGroup ?? "no group", drivers.RequestedBy);
+                    result = await wds.RunJobAsync("Import-WdsDrivers", new Dictionary<string, object?>
+                    {
+                        ["Path"] = drivers.SourcePath,
+                        ["DriverGroup"] = drivers.DriverGroup,
+                        ["CreateGroup"] = drivers.CreateGroup,
+                        ["Architecture"] = drivers.Architecture ?? "",
+                        ["TempFolder"] = tempFolder,
+                    }, job.Message, job.Progress, ct);
+                    summary = result.TryGetProperty("summary", out var said) ? said.GetString() : null;
+                    break;
+
+                default:
+                    throw new InvalidOperationException($"There's no import for {request.GetType().Name}.");
+            }
 
             if (request.DeleteUploadAfter && request.UploadId is { } uploadId)
             {
@@ -112,7 +170,7 @@ public sealed class ImportQueue(
                     job.Message($"Couldn't delete the uploaded file: {ex.Message}");
                 }
             }
-            job.Succeed(result);
+            job.Succeed(result, summary);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
@@ -127,7 +185,7 @@ public sealed class ImportQueue(
             _jobs.TryRemove(old.Id, out _);
     }
 
-    private sealed class Job(string id, ImportRequest request)
+    private sealed class Job(string id, IImportRequest request)
     {
         private readonly Lock _lock = new();
         private readonly List<JobLogLine> _log = [];
@@ -139,7 +197,7 @@ public sealed class ImportQueue(
         private JsonElement? _result;
 
         public string Id { get; } = id;
-        public ImportRequest Request { get; } = request;
+        public IImportRequest Request { get; } = request;
         public DateTimeOffset CreatedAt { get; } = DateTimeOffset.UtcNow;
         public bool IsFinished { get { lock (_lock) return _status is JobStatus.Succeeded or JobStatus.Failed; } }
 
@@ -173,12 +231,13 @@ public sealed class ImportQueue(
             }
         }
 
-        public void Succeed(JsonElement result)
+        /// <param name="summary">What came of it, if more than that it's imported.</param>
+        public void Succeed(JsonElement result, string? summary = null)
         {
             lock (_lock)
             {
                 _status = JobStatus.Succeeded;
-                _stage = "Imported";
+                _stage = summary ?? "Imported";
                 _percent = 100;
                 _result = result;
                 _finishedAt = DateTimeOffset.UtcNow;

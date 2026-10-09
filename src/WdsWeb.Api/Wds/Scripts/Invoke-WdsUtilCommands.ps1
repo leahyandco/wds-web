@@ -4,7 +4,8 @@ param([Parameter(Mandatory)] [object[]] $Commands)
 $ErrorActionPreference = 'Stop'
 
 $allowed = '/Set-Server', '/Set-TransportServer', '/Add-Device', '/Set-Device', '/Remove-Device', '/Approve-AutoAddDevices', '/Reject-AutoAddDevices',
-    '/Delete-AutoAddDevices'
+    '/Delete-AutoAddDevices', '/Add-DriverGroup', '/Set-DriverGroup', '/Remove-DriverGroup', '/Add-DriverGroupFilter', '/Remove-DriverGroupFilter',
+    '/Set-DriverPackage', '/Remove-DriverPackage', '/Add-DriverGroupPackage', '/Remove-DriverGroupPackage'
 
 $applied = @()
 foreach ($command in $Commands) {

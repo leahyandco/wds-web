@@ -63,6 +63,14 @@ public sealed class WdsOptions
 
     public static readonly string[] DefaultImageSearchPaths = [@"C:\Users\*\Downloads", @"C:\ISO", @"C:\ISOs", @"C:\Images"];
 
+    /// <summary>
+    /// Folders on the WDS server to offer .zip and .cab files of drivers from, wildcards allowed. Left
+    /// empty, <see cref="DefaultDriverSearchPaths"/> is used.
+    /// </summary>
+    public string[] DriverSearchPaths { get; set; } = [];
+
+    public static readonly string[] DefaultDriverSearchPaths = [@"C:\Users\*\Downloads", @"C:\Drivers"];
+
     /// <summary>How long a single job, such as an image import, may run.</summary>
     public TimeSpan JobTimeout { get; set; } = TimeSpan.FromHours(3);
 }

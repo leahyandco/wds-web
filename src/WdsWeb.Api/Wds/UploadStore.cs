@@ -24,7 +24,8 @@ public sealed class UploadOffsetException(long received)
 /// </summary>
 public sealed partial class UploadStore(StagingArea staging)
 {
-    public static readonly string[] AllowedExtensions = [".iso", ".wim", ".esd"];
+    /// <summary>Images, and drivers in a .zip or .cab.</summary>
+    public static readonly string[] AllowedExtensions = [".iso", ".wim", ".esd", ".zip", ".cab"];
     private const long MaximumSize = 64L * 1024 * 1024 * 1024;
     private const long KeepFree = 2L * 1024 * 1024 * 1024;
     private const string PartSuffix = ".part";

@@ -16,9 +16,44 @@ public sealed record ImportImageRequest(
     string? FileName,
     bool DeleteUploadAfter);
 
+/// <summary>Drivers to add, as the UI asks for them: from an uploaded .zip or .cab, or from a file or folder already on the WDS server.</summary>
+/// <param name="ServerPath">A .zip or .cab, a folder of drivers, or one .inf, on the WDS server.</param>
+/// <param name="DriverGroup">The driver group to put the packages in; null or "" for none.</param>
+/// <param name="Architecture">x86, x64, arm or arm64 to add only those drivers; null or "" for all.</param>
+public sealed record ImportDriversRequest(
+    string? UploadId,
+    string? ServerPath,
+    string? DriverGroup,
+    bool CreateGroup,
+    string? Architecture,
+    bool DeleteUploadAfter);
+
 /// <summary>Turns what the UI asked for into an <see cref="ImportRequest"/>, or explains what's wrong with it.</summary>
 public static partial class ImportValidation
 {
+    public static DriverImportRequest ValidateDrivers(ImportDriversRequest request, UploadStore uploads, string? requestedBy = null)
+    {
+        string sourcePath;
+        var fromUpload = !string.IsNullOrWhiteSpace(request.UploadId);
+        if (fromUpload)
+        {
+            var upload = uploads.Get(request.UploadId!) ?? throw new InvalidRequestException("That upload no longer exists.");
+            if (!upload.Complete) throw new InvalidRequestException("That upload hasn't finished yet.");
+            if (Path.GetExtension(upload.ServerPath).ToLowerInvariant() is not (".zip" or ".cab"))
+                throw new InvalidRequestException("Upload drivers as a .zip or .cab file.");
+            sourcePath = upload.ServerPath;
+        }
+        else
+        {
+            sourcePath = ServerPath(request.ServerPath, @"C:\Drivers\Latitude-5440.zip");
+        }
+
+        var group = string.IsNullOrWhiteSpace(request.DriverGroup) ? null : WdsDriverCommands.GroupName(request.DriverGroup);
+        return new DriverImportRequest(
+            sourcePath, group, group is not null && request.CreateGroup, WdsDriverCommands.Architecture(request.Architecture),
+            fromUpload ? request.UploadId!.Trim() : null, fromUpload && request.DeleteUploadAfter, requestedBy);
+    }
+
     public static ImportRequest Validate(ImportImageRequest request, UploadStore uploads, string? requestedBy = null)
     {
         string sourcePath;
@@ -73,11 +108,11 @@ public static partial class ImportValidation
     }
 
     /// <summary>A full path on the WDS server, such as C:\ISO\Win11.iso, or a UNC path it can reach.</summary>
-    public static string ServerPath(string? path)
+    public static string ServerPath(string? path, string example = @"C:\ISO\Windows11.iso")
     {
         path = path?.Trim().Trim('"');
         if (string.IsNullOrEmpty(path) || !Path.IsPathFullyQualified(path) || path.Contains("..", StringComparison.Ordinal))
-            throw new InvalidRequestException(@"Give the full path of a file on the WDS server, such as C:\ISO\Windows11.iso.");
+            throw new InvalidRequestException($"Give the full path of a file on the WDS server, such as {example}.");
         return path;
     }
 

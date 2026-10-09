@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace WdsWeb.Api.Wds;
 
@@ -20,18 +21,19 @@ public sealed record DriverPackage(
     string? Locale,
     IReadOnlyList<string> Groups);
 
-public sealed record DriverGroup(string Name, string? Id, string? Applicability, bool Enabled, int PackageCount);
+/// <param name="Filters">Which clients get the group's packages; with none, every client does.</param>
+public sealed record DriverGroup(string Name, string? Id, string? Applicability, bool Enabled, int PackageCount, IReadOnlyList<DriverGroupFilter> Filters);
 
 public sealed record DriverCatalog(IReadOnlyList<DriverGroup> Groups, IReadOnlyList<DriverPackage> Packages);
 
 /// <summary>
-/// Reads the WDS driver store from WDSUTIL's /Get-AllDriverPackages and
-/// /Get-AllDriverGroups /Show:PackageMetaData reports. The WDS PowerShell module can't be used:
-/// Get-WdsDriverPackage returns only some packages, and the CIM class none at all. The reports are
-/// blocks of "Label: value" lines under "Driver Group: ..." and "Driver Package Information"
-/// headings. English output only.
+/// Reads the WDS driver store from WDSUTIL's /Get-AllDriverPackages and /Get-AllDriverGroups /Show:All
+/// reports. The WDS PowerShell module can't be used: Get-WdsDriverPackage returns only some packages,
+/// and the CIM class none at all. The reports are blocks of "Label: value" lines under
+/// "Driver Group: ..." and "Driver Package Information" headings, and a group's filters are
+/// "Filter Type: ..." headings over "Filter policy = ..." and "Value [n] = ..." lines. English output only.
 /// </summary>
-public static class WdsUtilDriverParser
+public static partial class WdsUtilDriverParser
 {
     private static readonly CultureInfo[] DateCultures = [CultureInfo.GetCultureInfo("en-US"), CultureInfo.GetCultureInfo("en-AU"), CultureInfo.InvariantCulture];
 
@@ -55,11 +57,15 @@ public static class WdsUtilDriverParser
                 Field(g, "ID"),
                 Field(g, "Applicability"),
                 IsYes(Field(g, "Enabled")),
-                groupRecords.Count(p => p.IsPackage && p.Group == g)))
+                groupRecords.Count(p => p.IsPackage && p.Group == g),
+                g.Filters.Select(f => DriverFilters.FromReport(f.Type, f.Policy, f.Values)).ToList()))
             .ToList();
 
         return new DriverCatalog(groups, packages);
     }
+
+    /// <summary>The groups in a /Get-DriverGroup or /Get-AllDriverGroups report.</summary>
+    public static IReadOnlyList<DriverGroup> ParseGroups(string groupsReport) => Parse("", groupsReport).Groups;
 
     private static DriverPackage ToPackage(Record r, IReadOnlyList<string> groups) => new(
         Field(r, "Id")!,
@@ -83,6 +89,7 @@ public static class WdsUtilDriverParser
     {
         var records = new List<Record>();
         Record? group = null, current = null;
+        Filter? filter = null;
         foreach (var rawLine in report.Split('\n'))
         {
             var line = rawLine.Trim();
@@ -90,12 +97,27 @@ public static class WdsUtilDriverParser
             {
                 current = group = new Record(IsPackage: false, Group: null);
                 records.Add(group);
+                filter = null;
                 continue;
             }
             if (line == "Driver Package Information")
             {
                 current = new Record(IsPackage: true, group);
                 records.Add(current);
+                filter = null;
+                continue;
+            }
+            if (line.StartsWith("Filter Type: ", StringComparison.Ordinal) && group is not null)
+            {
+                filter = new Filter(line["Filter Type: ".Length..].Trim());
+                group.Filters.Add(filter);
+                current = null;
+                continue;
+            }
+            if (filter is not null)
+            {
+                if (line.StartsWith("Filter policy = ", StringComparison.OrdinalIgnoreCase)) filter.Policy = line["Filter policy = ".Length..].Trim();
+                else if (FilterValue().Match(line) is { Success: true } value) filter.Values.Add(value.Groups["value"].Value.Trim());
                 continue;
             }
             if (current is null) continue;
@@ -124,10 +146,21 @@ public static class WdsUtilDriverParser
         return value;
     }
 
+    [GeneratedRegex(@"^Value \[\d+\] = (?<value>.*)$")]
+    private static partial Regex FilterValue();
+
     private sealed class Record(bool IsPackage, Record? Group)
     {
         public bool IsPackage { get; } = IsPackage;
         public Record? Group { get; } = Group;
         public Dictionary<string, string> Fields { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<Filter> Filters { get; } = [];
+    }
+
+    private sealed class Filter(string type)
+    {
+        public string Type { get; } = type;
+        public string? Policy { get; set; }
+        public List<string> Values { get; } = [];
     }
 }

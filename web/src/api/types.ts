@@ -162,12 +162,62 @@ export interface DriverPackage {
   groups: string[]
 }
 
+/** Which clients get a driver group's packages. Types and chassis types are as WDSUTIL takes them, e.g. ChassisType, MiniTower. */
+export interface DriverGroupFilter {
+  type: string
+  /** Include: only clients that match get the group. Exclude: clients that match don't. */
+  policy: 'Include' | 'Exclude'
+  values: string[]
+}
+
 export interface DriverGroup {
   name: string
   id: string | null
+  /** Matched: clients get the packages that match their hardware. All: every package. */
   applicability: string | null
   enabled: boolean
   packageCount: number
+  /** With none, every client gets the group. */
+  filters: DriverGroupFilter[]
+}
+
+export interface NewDriverGroup {
+  name: string
+  enabled: boolean
+  applicability: 'Matched' | 'All'
+  filters: DriverGroupFilter[]
+}
+
+/** Changes to a driver group; null leaves a value as it is. Filters replace the group's whole set. */
+export interface DriverGroupChanges {
+  name?: string | null
+  enabled?: boolean | null
+  applicability?: string | null
+  filters?: DriverGroupFilter[] | null
+}
+
+export interface DriverPackageChanges {
+  name?: string | null
+  enabled?: boolean | null
+}
+
+export type DriverPackageAction = 'enable' | 'disable' | 'remove' | 'addToGroup' | 'removeFromGroup'
+
+export interface DriverPackageBatch {
+  ids: string[]
+  action: DriverPackageAction
+  group?: string | null
+}
+
+/** Drivers to add from an uploaded .zip or .cab, or from a file or folder on the WDS server. */
+export interface ImportDriversBody {
+  uploadId?: string
+  serverPath?: string
+  driverGroup?: string | null
+  createGroup: boolean
+  /** x86, x64, arm or arm64 to add only those drivers; null for all. */
+  architecture?: string | null
+  deleteUploadAfter: boolean
 }
 
 export interface DriverCatalog {
@@ -246,17 +296,42 @@ export interface ImportRequestBody {
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
+export interface ImageImportRequest {
+  kind: ImageKind
+  sourcePath: string
+  innerPath: string | null
+  index: number
+  imageGroup: string | null
+  name: string
+  fileName: string
+}
+
+export interface DriverImportRequest {
+  kind: 'drivers'
+  sourcePath: string
+  /** The .zip, .cab or folder the drivers come from. */
+  name: string
+  driverGroup: string | null
+  architecture: string | null
+}
+
+/** What a driver import found and did. */
+export interface DriverImportResult {
+  summary: string
+  found: number
+  /** Packages WDS didn't have before; null if it couldn't be counted. */
+  new: number | null
+  added: string[]
+  otherArchitecture: string[]
+  failed: { inf: string; reason: string }[]
+  driverGroup: string | null
+}
+
+export type ImportKind = ImageKind | 'drivers'
+
 export interface ImportJob {
   id: string
-  request: {
-    sourcePath: string
-    innerPath: string | null
-    kind: ImageKind
-    index: number
-    imageGroup: string | null
-    name: string
-    fileName: string
-  }
+  request: ImageImportRequest | DriverImportRequest
   status: JobStatus
   stage: string | null
   percent: number | null
@@ -265,6 +340,8 @@ export interface ImportJob {
   finishedAt: string | null
   error: string | null
   log: { time: string; text: string }[]
+  /** What the import's script reported: the image imported, or a DriverImportResult. */
+  result: unknown
 }
 
 export interface WdsEvent {

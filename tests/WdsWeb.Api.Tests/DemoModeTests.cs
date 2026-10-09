@@ -35,6 +35,7 @@ public sealed class DemoModeTests(DemoModeTests.DemoApp app) : IClassFixture<Dem
     [InlineData("/api/events?hours=168")]
     [InlineData("/api/activity?hours=168")]
     [InlineData("/api/images/files")]
+    [InlineData("/api/drivers/files")]
     [InlineData("/api/console")]
     [InlineData("/api/install-images/unattend?name=Windows%2011%20Pro&imageGroup=Windows%2011")]
     public async Task Answers_every_page(string path)
@@ -63,6 +64,10 @@ public sealed class DemoModeTests(DemoModeTests.DemoApp app) : IClassFixture<Dem
 
         Assert.True(drivers.GetProperty("packages").GetArrayLength() > 10);
         Assert.True(drivers.GetProperty("groups").GetArrayLength() > 3);
+        // Its model groups have filters, written as WDSUTIL writes them and read back as it takes them.
+        Assert.Contains(drivers.GetProperty("groups").EnumerateArray(), g =>
+            g.GetProperty("filters").EnumerateArray().Any(f => f.GetProperty("type").GetString() == "ChassisType" &&
+                f.GetProperty("values").EnumerateArray().Any(v => v.GetString() == "MiniTower")));
     }
 
     [Theory]
@@ -70,6 +75,11 @@ public sealed class DemoModeTests(DemoModeTests.DemoApp app) : IClassFixture<Dem
     [InlineData("POST", "/api/boot-images/disable", """{"name":"WinPE Tools (x64)","architecture":"X64"}""")]
     [InlineData("PUT", "/api/server/hands-free", """{"allow":true}""")]
     [InlineData("POST", "/api/uploads", """{"fileName":"boot.wim","size":1024}""")]
+    [InlineData("POST", "/api/drivers/import", """{"serverPath":"C:\\Drivers\\Dell.zip","createGroup":false,"deleteUploadAfter":false}""")]
+    [InlineData("POST", "/api/drivers/groups", """{"name":"Dell laptops"}""")]
+    [InlineData("PUT", "/api/drivers/groups/Network%20adapters", """{"enabled":false}""")]
+    [InlineData("DELETE", "/api/drivers/groups/Network%20adapters", "{}")]
+    [InlineData("POST", "/api/drivers/packages/batch", """{"ids":["{08611570-9951-4B50-A49A-F4EFAEBE3A0D}"],"action":"remove"}""")]
     public async Task Changes_nothing(string method, string path, string body)
     {
         var response = await _client.SendAsync(new HttpRequestMessage(new HttpMethod(method), path)

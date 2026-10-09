@@ -1,0 +1,77 @@
+
+Windows Deployment Services Management Utility [Version 10.0.26100.1150]
+© Microsoft Corporation. All rights reserved.
+
+
+-----------------------------------------
+Driver Group: Contoso laptops
+-----------------------------------------
+Name: Contoso laptops
+ID: {C644D2C0-6A18-4912-B6D5-26C60AD50D8B}
+Applicability: Matched
+Enabled: Yes
+-----------------------------------------
+
+Driver Packages:
+-----------------------------------------
+
+-----------------------------------
+Driver Package Information
+-----------------------------------
+Id: {08611570-9951-4B50-A49A-F4EFAEBE3A0D}
+Name: vmusb [x64]
+Date added: Friday, October 9, 2026 11:45:01 AM
+Enabled: Yes
+
+Package INF file path: \\WDS01\REMINST\Stores\Drivers\vmusb.inf_x64_{08611570-9951-4B50-A49A-F4EFAEBE3A0D}\vmusb.inf
+Architecture: x64
+Class name: USB
+Class GUID: {36FC9E60-C465-11CF-8056-444553540000}
+Provider name: VMware, Inc.
+Locale name:
+Signed: Yes
+Version: 4.3.1.4
+Date: Tuesday, March 23, 2021 12:00:00 AM
+-----------------------------------
+
+
+===============================================================================
+Total number of driver packages: 1
+--------
+
+Driver Group Filters:
+-----------------------------------------
+
+-----------------------------------
+Filter Type: OS Language
+-----------------------------------
+     Filter policy = Include
+     Value [1] = en-US
+
+-----------------------------------
+Filter Type: BIOS Vendor
+-----------------------------------
+     Filter policy = Include
+     Value [1] = VMware, Inc.
+
+-----------------------------------
+Filter Type: Chassis Type
+-----------------------------------
+     Filter policy = Exclude
+     Value [1] = Tower
+     Value [2] = Mini Tower
+     Value [3] = All-in-One
+     Value [4] = Unknown Chassis
+
+-----------------------------------
+Filter Type: Model
+-----------------------------------
+     Filter policy = Include
+     Value [1] = VMware7,1
+     Value [2] = VMware Virtual Platform
+
+===============================================================================
+Total number of driver group filters: 4
+--------
+
+The command completed successfully.

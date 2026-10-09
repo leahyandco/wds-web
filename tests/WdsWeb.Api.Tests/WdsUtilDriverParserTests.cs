@@ -63,6 +63,36 @@ public class WdsUtilDriverParserTests
         Assert.All(WdsUtilDriverParser.Parse(Packages, Groups).Packages, p => Assert.Empty(p.Groups));
     }
 
+    [Fact]
+    public void Reads_a_groups_filters_in_the_terms_wdsutil_takes()
+    {
+        // /Get-DriverGroup /Show:All spells filter types and chassis types out ("Chassis Type", "Mini Tower").
+        var group = Assert.Single(WdsUtilDriverParser.ParseGroups(Fixture("get-drivergroup-filters.txt")));
+
+        Assert.Equal(1, group.PackageCount);
+        Assert.Equal(["OsLanguage", "BiosVendor", "ChassisType", "Model"], group.Filters.Select(f => f.Type));
+        var chassis = group.Filters[2];
+        Assert.Equal("Exclude", chassis.Policy);
+        Assert.Equal(["Tower", "MiniTower", "AllInOne", "UnknownChassis"], chassis.Values);
+        // Free-text values are kept as they are, commas and all.
+        Assert.Equal(["VMware7,1", "VMware Virtual Platform"], group.Filters[3].Values);
+    }
+
+    [Fact]
+    public void A_group_without_filters_has_none()
+    {
+        Assert.All(WdsUtilDriverParser.Parse(Packages, Groups).Groups, g => Assert.Empty(g.Filters));
+    }
+
+    [Fact]
+    public void Filters_are_not_mistaken_for_package_fields()
+    {
+        var package = Assert.Single(WdsUtilDriverParser.Parse(Fixture("get-drivergroup-filters.txt"), Fixture("get-drivergroup-filters.txt")).Packages);
+
+        Assert.Equal("vmusb [x64]", package.Name);
+        Assert.Equal(["Contoso laptops"], package.Groups);
+    }
+
     private static string Fixture(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));
 }

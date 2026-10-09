@@ -1,8 +1,9 @@
-import { Badge, Button, Card, Code, Drawer, Group, Loader, Stack, Text } from '@mantine/core'
+import { Alert, Badge, Button, Card, Code, Drawer, Group, List, Loader, Stack, Text } from '@mantine/core'
+import { IconAlertTriangle } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useJobs } from '../api/queries'
-import type { ImageKind, ImportJob, JobStatus } from '../api/types'
+import type { DriverImportResult, ImportJob, ImportKind, JobStatus } from '../api/types'
 import { formatAgo, formatDateTime, formatDuration } from '../lib/format'
 import { useNow } from '../lib/useNow'
 
@@ -13,8 +14,11 @@ const statusBadges: Record<JobStatus, { label: string; color: string }> = {
   failed: { label: 'Failed', color: 'red' },
 }
 
-/** Imports of one kind, newest first, refreshing the image list as each one finishes. */
-export function ImportJobs({ kind }: { kind: ImageKind }) {
+/** What each kind of import changes, to refresh once one finishes. */
+const refreshes: Record<ImportKind, string> = { boot: 'boot-images', install: 'install-images', drivers: 'drivers' }
+
+/** Imports of one kind, newest first, refreshing what they change as each one finishes. */
+export function ImportJobs({ kind }: { kind: ImportKind }) {
   const jobs = useJobs()
   const queryClient = useQueryClient()
   const now = useNow()
@@ -27,7 +31,7 @@ export function ImportJobs({ kind }: { kind: ImageKind }) {
     for (const job of mine) {
       if ((job.status === 'succeeded' || job.status === 'failed') && !seenFinished.current.has(job.id)) {
         seenFinished.current.add(job.id)
-        void queryClient.invalidateQueries({ queryKey: [kind === 'boot' ? 'boot-images' : 'install-images'] })
+        void queryClient.invalidateQueries({ queryKey: [refreshes[kind]] })
         void queryClient.invalidateQueries({ queryKey: ['server-config'] })
       }
     }
@@ -94,25 +98,70 @@ function JobRow({ job, now, onOpen }: { job: ImportJob; now: number; onOpen: () 
 }
 
 function JobLog({ job }: { job: ImportJob }) {
+  const request = job.request
   return (
     <Stack gap="sm">
-      <Text size="sm">
-        <b>Source:</b> {job.request.sourcePath}
-        {job.request.innerPath ? ` → ${job.request.innerPath}` : ''} (image {job.request.index})
-      </Text>
-      {job.request.imageGroup && (
-        <Text size="sm">
-          <b>Image group:</b> {job.request.imageGroup}
-        </Text>
+      {request.kind === 'drivers' ? (
+        <>
+          <Text size="sm">
+            <b>Source:</b> {request.sourcePath}
+          </Text>
+          <Text size="sm">
+            <b>Driver group:</b> {request.driverGroup ?? 'None'}
+          </Text>
+          <Text size="sm">
+            <b>Architecture:</b> {request.architecture ?? 'All'}
+          </Text>
+          {job.status === 'succeeded' && <DriverResult result={job.result as DriverImportResult} />}
+        </>
+      ) : (
+        <>
+          <Text size="sm">
+            <b>Source:</b> {request.sourcePath}
+            {request.innerPath ? ` → ${request.innerPath}` : ''} (image {request.index})
+          </Text>
+          {request.imageGroup && (
+            <Text size="sm">
+              <b>Image group:</b> {request.imageGroup}
+            </Text>
+          )}
+          <Text size="sm">
+            <b>File:</b> {request.fileName}
+          </Text>
+        </>
       )}
-      <Text size="sm">
-        <b>File:</b> {job.request.fileName}
-      </Text>
       <Code block>
         {job.log.length === 0
           ? 'Nothing logged yet.'
           : job.log.map((line) => `${formatDateTime(line.time)}  ${line.text}`).join('\n')}
       </Code>
     </Stack>
+  )
+}
+
+/** What a driver import added, and the .inf files it couldn't add or skipped. */
+function DriverResult({ result }: { result: DriverImportResult }) {
+  return (
+    <>
+      <Text size="sm">
+        <b>Result:</b> {result.summary}.
+      </Text>
+      {result.failed.length > 0 && (
+        <Alert color="orange" icon={<IconAlertTriangle />} title={`${result.failed.length} couldn't be added`}>
+          <List size="sm" spacing={4}>
+            {result.failed.map((f) => (
+              <List.Item key={f.inf}>
+                <b>{f.inf}</b>: {f.reason}
+              </List.Item>
+            ))}
+          </List>
+        </Alert>
+      )}
+      {result.otherArchitecture.length > 0 && (
+        <Text size="sm" c="dimmed">
+          Skipped for having no drivers for this architecture: {result.otherArchitecture.join(', ')}
+        </Text>
+      )}
+    </>
   )
 }
