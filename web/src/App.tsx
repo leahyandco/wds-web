@@ -1,24 +1,25 @@
 import { Alert, Button, Center, Loader, Text } from '@mantine/core'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { lazy, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Route, Routes } from 'react-router'
 import { SIGNED_OUT_EVENT } from './api/client'
 import { useSession } from './api/queries'
 import type { SessionInfo } from './api/types'
 import { AppLayout } from './components/AppLayout'
+import { lazyPage } from './lib/lazyPage'
 import { SignInAgain, SignInPage } from './pages/SignInPage'
 
 // Each page is its own chunk, loaded when it's first opened, so the console starts with less to download.
-const ActivityPage = lazy(() => import('./pages/ActivityPage').then((m) => ({ default: m.ActivityPage })))
-const BootImagesPage = lazy(() => import('./pages/BootImagesPage').then((m) => ({ default: m.BootImagesPage })))
-const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
-const DevicesPage = lazy(() => import('./pages/DevicesPage').then((m) => ({ default: m.DevicesPage })))
-const DriversPage = lazy(() => import('./pages/DriversPage').then((m) => ({ default: m.DriversPage })))
-const EventsPage = lazy(() => import('./pages/EventsPage').then((m) => ({ default: m.EventsPage })))
-const InstallImagesPage = lazy(() => import('./pages/InstallImagesPage').then((m) => ({ default: m.InstallImagesPage })))
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })))
-const ServerSettingsPage = lazy(() => import('./pages/ServerSettingsPage').then((m) => ({ default: m.ServerSettingsPage })))
+const ActivityPage = lazyPage(() => import('./pages/ActivityPage').then((m) => m.ActivityPage))
+const BootImagesPage = lazyPage(() => import('./pages/BootImagesPage').then((m) => m.BootImagesPage))
+const DashboardPage = lazyPage(() => import('./pages/DashboardPage').then((m) => m.DashboardPage))
+const DevicesPage = lazyPage(() => import('./pages/DevicesPage').then((m) => m.DevicesPage))
+const DriversPage = lazyPage(() => import('./pages/DriversPage').then((m) => m.DriversPage))
+const EventsPage = lazyPage(() => import('./pages/EventsPage').then((m) => m.EventsPage))
+const InstallImagesPage = lazyPage(() => import('./pages/InstallImagesPage').then((m) => m.InstallImagesPage))
+const NotFoundPage = lazyPage(() => import('./pages/NotFoundPage').then((m) => m.NotFoundPage))
+const ServerSettingsPage = lazyPage(() => import('./pages/ServerSettingsPage').then((m) => m.ServerSettingsPage))
 
 export function App() {
   const session = useSession()
