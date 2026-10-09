@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useServerConfig } from '../api/queries'
 import type { ServerImageFile, UploadInfo } from '../api/types'
 import { formatBytes, formatDateTime, formatDuration } from '../lib/format'
-import { uploadFile, type UploadProgress } from '../lib/upload'
+import { uploadFile, whileUploading, type UploadProgress } from '../lib/upload'
 
 const GIB = 1024 ** 3
 
@@ -41,7 +41,7 @@ export function UploadPanel({ accept, label, placeholder, action, onUploaded, di
     setError(null)
     setProgress({ sent: 0, total: file.size, bytesPerSecond: null, retrying: false })
     try {
-      onUploaded(await uploadFile(file, setProgress, abort.signal))
+      onUploaded(await whileUploading(() => uploadFile(file, setProgress, abort.signal)))
     } catch (e) {
       if (!abort.signal.aborted) setError(e instanceof Error ? e.message : String(e))
     } finally {

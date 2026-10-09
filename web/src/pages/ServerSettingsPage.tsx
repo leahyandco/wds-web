@@ -11,6 +11,7 @@ import { HandsFreeDialog } from '../components/HandsFreeDialog'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { SettingsEditor } from '../components/SettingsEditor'
+import { StagedUploadsCard } from '../components/StagedUploadsCard'
 import { EMPTY, formatBytes } from '../lib/format'
 import { editorFor } from '../lib/settings'
 import { findValue } from '../lib/wdsutil'
@@ -123,6 +124,8 @@ function Settings({ config }: { config: ServerConfig }) {
       </SimpleGrid>
 
       <ConsoleCard />
+
+      <StagedUploadsCard />
 
       <Accordion variant="contained">
         <Accordion.Item value="raw">

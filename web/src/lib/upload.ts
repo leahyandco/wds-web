@@ -13,6 +13,28 @@ export interface UploadProgress {
   retrying: boolean
 }
 
+let running = 0
+
+/** Whether a file is being uploaded right now, so closing its dialog or the page can ask first. */
+export const uploadsInProgress = () => running > 0
+
+/** Asks before something that would stop an upload in progress; true when there's none, or it may stop. */
+export const mayStopUploads = () =>
+  !uploadsInProgress() ||
+  window.confirm("Stop the upload? What's arrived so far stays on the WDS server, and choosing the same file again carries on from there.")
+
+const warnBeforeLeaving = (event: BeforeUnloadEvent) => event.preventDefault()
+
+/** Counts an upload as running while `work` does, and warns before the page is left meanwhile. */
+export async function whileUploading<T>(work: () => Promise<T>): Promise<T> {
+  if (running++ === 0) window.addEventListener('beforeunload', warnBeforeLeaving)
+  try {
+    return await work()
+  } finally {
+    if (--running === 0) window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }
+}
+
 /**
  * Sends a file to the WDS server's staging folder in chunks. A failed chunk is retried with back-off
  * after asking the server how much it has, and an unfinished upload of the same file (same name and

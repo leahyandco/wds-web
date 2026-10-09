@@ -22,6 +22,7 @@ import { useState } from 'react'
 import { useInspectImage, useServerConfig, useServerImageFiles, useStartImport } from '../api/queries'
 import type { ImageEntry, ImageFileEntry, ImageFileInfo, ImageKind, UploadInfo } from '../api/types'
 import { formatBytes, suggestFileName } from '../lib/format'
+import { mayStopUploads } from '../lib/upload'
 import { isBlockedSetup, releaseTag, windowsRelease } from '../lib/windows'
 import { ServerFilePanel, UploadPanel } from './SourcePanels'
 import { DialogForm } from './DialogForm'
@@ -31,9 +32,10 @@ const NEW_GROUP = '\u0000new'
 
 type Source = { upload: UploadInfo } | { serverPath: string }
 
+/** The images chosen in one file: a boot image, or one or more install image editions. */
 interface Selection {
   file: ImageFileEntry
-  image: ImageEntry
+  images: ImageEntry[]
 }
 
 interface ImportImageDialogProps {
@@ -53,7 +55,8 @@ export function ImportImageDialog({ kind, opened, onClose, groups = [] }: Import
   return (
     <Modal
       opened={opened}
-      onClose={onClose}
+      // Closing stops an upload in progress, so ask first.
+      onClose={() => mayStopUploads() && onClose()}
       size="xl"
       closeOnClickOutside={false}
       title={kind === 'boot' ? 'Import a boot image' : 'Import an install image'}
@@ -114,7 +117,7 @@ function defaultSelection(info: ImageFileInfo, kind: ImageKind): Selection | nul
   if (!file || file.images.length === 0) return null
   // A boot.wim from Windows media holds WinPE (1) and Setup (2); Setup is the one marked bootable.
   const image = kind === 'boot' ? (file.images.find((i) => i.bootable) ?? file.images[file.images.length - 1]) : file.images[0]
-  return { file, image }
+  return { file, images: [image] }
 }
 
 function SourceStep({ onChosen, reading, error }: { onChosen: (source: Source) => void; reading: boolean; error: string | null }) {
@@ -182,6 +185,12 @@ function ChooseStep({
 }) {
   const candidates = info.files.filter((f) => f.role === kind)
   const others = info.files.filter((f) => f.role !== kind)
+  // Install images can be chosen several at a time, from one file; a boot image is one.
+  const toggle = (file: ImageFileEntry, image: ImageEntry) => {
+    const current = selection?.file === file ? selection.images : []
+    const images = current.some((i) => i.index === image.index) ? current.filter((i) => i.index !== image.index) : [...current, image]
+    onSelect({ file, images: images.sort((a, b) => a.index - b.index) })
+  }
 
   return (
     <Stack mt="md">
@@ -202,6 +211,11 @@ function ChooseStep({
       ) : (
         <ScrollArea.Autosize mah={420} type="auto">
           <Stack>
+            {kind === 'install' && (
+              <Text size="sm" c="dimmed">
+                Choose one edition or several; each becomes an install image of its own.
+              </Text>
+            )}
             {candidates.map((file) => (
               <div key={file.innerPath ?? info.path}>
                 {file.innerPath && (
@@ -209,43 +223,46 @@ function ChooseStep({
                     {file.innerPath} · {formatBytes(file.size)}
                   </Text>
                 )}
-                <Radio.Group
-                  value={selection?.file === file ? String(selection.image.index) : null}
-                  onChange={(value) => onSelect({ file, image: file.images.find((i) => String(i.index) === value)! })}
-                >
+                {kind === 'install' ? (
                   <Stack gap="xs">
                     {file.images.map((image) => (
-                      <Radio.Card key={image.index} value={String(image.index)} p="sm" radius="md">
+                      <Checkbox.Card
+                        key={image.index}
+                        checked={selection?.file === file && selection.images.some((i) => i.index === image.index)}
+                        onClick={() => toggle(file, image)}
+                        p="sm"
+                        radius="md"
+                      >
                         <Group wrap="nowrap" align="flex-start">
-                          <Radio.Indicator mt={2} />
-                          <div style={{ flex: 1 }}>
-                            <Group gap="xs">
-                              <Text size="sm" fw={500}>
-                                {image.index}. {image.name}
-                              </Text>
-                              {kind === 'boot' && image.bootable && (
-                                <Badge size="sm" variant="light" tt="none">
-                                  Bootable
-                                </Badge>
-                              )}
-                            </Group>
-                            <Text size="xs" c="dimmed">
-                              {[windowsRelease(image.version) ?? `Build ${image.version}`, image.version, image.architecture, image.editionId, formatBytes(image.size)]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </Text>
-                          </div>
+                          <Checkbox.Indicator mt={2} />
+                          <ImageSummary kind={kind} image={image} />
                         </Group>
-                      </Radio.Card>
+                      </Checkbox.Card>
                     ))}
                   </Stack>
-                </Radio.Group>
+                ) : (
+                  <Radio.Group
+                    value={selection?.file === file ? String(selection.images[0]?.index) : null}
+                    onChange={(value) => onSelect({ file, images: file.images.filter((i) => String(i.index) === value) })}
+                  >
+                    <Stack gap="xs">
+                      {file.images.map((image) => (
+                        <Radio.Card key={image.index} value={String(image.index)} p="sm" radius="md">
+                          <Group wrap="nowrap" align="flex-start">
+                            <Radio.Indicator mt={2} />
+                            <ImageSummary kind={kind} image={image} />
+                          </Group>
+                        </Radio.Card>
+                      ))}
+                    </Stack>
+                  </Radio.Group>
+                )}
               </div>
             ))}
           </Stack>
         </ScrollArea.Autosize>
       )}
-      {kind === 'boot' && selection && isBlockedSetup(selection.image) && (
+      {kind === 'boot' && selection?.images[0] && isBlockedSetup(selection.images[0]) && (
         <Alert color="orange" icon={<IconAlertTriangle />} title="Windows 11's own Setup won't run the WDS client">
           Clients can boot this image, but its Setup shows a deprecation notice where the WDS client should be, and the PC
           restarts. Every boot image from Windows 11 or Windows Server 2025 media does this. To install Windows over WDS,
@@ -256,11 +273,34 @@ function ChooseStep({
         <Button variant="default" onClick={onBack}>
           Back
         </Button>
-        <Button onClick={onNext} disabled={!selection || !candidates.includes(selection.file)}>
+        <Button onClick={onNext} disabled={!selection || selection.images.length === 0 || !candidates.includes(selection.file)}>
           Next
         </Button>
       </Group>
     </Stack>
+  )
+}
+
+/** An image in a file: its index and name, and its Windows release, architecture, edition and size. */
+function ImageSummary({ kind, image }: { kind: ImageKind; image: ImageEntry }) {
+  return (
+    <div style={{ flex: 1 }}>
+      <Group gap="xs">
+        <Text size="sm" fw={500}>
+          {image.index}. {image.name}
+        </Text>
+        {kind === 'boot' && image.bootable && (
+          <Badge size="sm" variant="light" tt="none">
+            Bootable
+          </Badge>
+        )}
+      </Group>
+      <Text size="xs" c="dimmed">
+        {[windowsRelease(image.version) ?? `Build ${image.version}`, image.version, image.architecture, image.editionId, formatBytes(image.size)]
+          .filter(Boolean)
+          .join(' · ')}
+      </Text>
+    </div>
   )
 }
 
@@ -288,14 +328,19 @@ function DetailsStep({
 }) {
   const start = useStartImport()
   const config = useServerConfig()
-  const initialName = defaultName(kind, selection.image)
+  const [first] = selection.images
+  const many = selection.images.length > 1
+  const initialName = defaultName(kind, first)
   const [name, setName] = useState(initialName)
-  const [description, setDescription] = useState(selection.image.description ?? '')
+  const [description, setDescription] = useState(first.description ?? '')
   const [fileName, setFileName] = useState(suggestFileName(initialName))
   const [fileNameEdited, setFileNameEdited] = useState(false)
+  // With several editions, a name each; each file name follows from its name.
+  const [names, setNames] = useState(() => selection.images.map((image) => defaultName(kind, image)))
   const [group, setGroup] = useState<string | null>(groups[0] ?? NEW_GROUP)
   const [newGroup, setNewGroup] = useState('')
   const [deleteUpload, setDeleteUpload] = useState(true)
+  const [queued, setQueued] = useState<number | null>(null)
 
   const creatingGroup = kind === 'install' && group === NEW_GROUP
   const imageGroup = creatingGroup ? newGroup.trim() : (group ?? '')
@@ -303,52 +348,101 @@ function DetailsStep({
   // The compressed file is a fair upper bound for what the import adds to RemoteInstall.
   const tight = free != null && selection.file.size > free - 2 * GIB
 
-  const ready = name.trim() !== '' && fileName.trim() !== '' && (kind !== 'install' || imageGroup !== '')
+  const imports = many
+    ? selection.images.map((image, i) => ({ image, name: names[i].trim(), fileName: suggestFileName(names[i].trim()), description: image.description ?? '' }))
+    : [{ image: first, name: name.trim(), fileName: fileName.trim(), description: description.trim() }]
+  const clash = (key: (item: (typeof imports)[number]) => string) => new Set(imports.map(key)).size < imports.length
+  const sameNames = many && clash((item) => item.name.toLowerCase())
+  const ready =
+    imports.every((item) => item.name !== '' && item.fileName !== '') &&
+    !sameNames &&
+    !clash((item) => item.fileName.toLowerCase()) &&
+    (kind !== 'install' || imageGroup !== '')
 
   const submit = async () => {
     try {
-      await start.mutateAsync({
-        ...('upload' in source ? { uploadId: source.upload.id, deleteUploadAfter: deleteUpload } : { serverPath: source.serverPath }),
-        innerPath: selection.file.innerPath,
-        kind,
-        index: selection.image.index,
-        imageGroup: kind === 'install' ? imageGroup : undefined,
-        createGroup: creatingGroup,
-        name: name.trim(),
-        description: description.trim() || undefined,
-        fileName: fileName.trim(),
+      for (const [i, item] of imports.entries()) {
+        setQueued(i)
+        // Delete an upload only after the last of its imports, which runs last.
+        const last = i === imports.length - 1
+        await start.mutateAsync({
+          ...('upload' in source ? { uploadId: source.upload.id, deleteUploadAfter: deleteUpload && last } : { serverPath: source.serverPath }),
+          innerPath: selection.file.innerPath,
+          kind,
+          index: item.image.index,
+          imageGroup: kind === 'install' ? imageGroup : undefined,
+          // The first import creates a new group; the rest find it.
+          createGroup: creatingGroup,
+          name: item.name,
+          description: item.description || undefined,
+          fileName: item.fileName,
+        })
+      }
+      notifications.show({
+        title: many ? `${imports.length} imports started` : 'Import started',
+        message: many ? 'They run one after another; their progress shows on this page.' : `${imports[0].name} is importing. Its progress shows on this page.`,
       })
-      notifications.show({ title: 'Import started', message: `${name.trim()} is importing. Its progress shows on this page.` })
       onDone()
     } catch {
-      // Shown from start.error.
+      // Shown from start.error; any imports queued before it carry on.
+    } finally {
+      setQueued(null)
     }
   }
 
   return (
     <DialogForm mt="md" onSubmit={() => void submit()} canSubmit={ready}>
-      <TextInput
-        label="Name"
-        description={kind === 'boot' ? 'Shown in the WDS boot menu' : 'Shown in the WDS client’s image list'}
-        value={name}
-        onChange={(event) => {
-          const value = event.currentTarget.value
-          setName(value)
-          if (!fileNameEdited) setFileName(suggestFileName(value))
-        }}
-        required
-      />
-      <Textarea label="Description" autosize minRows={2} value={description} onChange={(event) => setDescription(event.currentTarget.value)} />
-      <TextInput
-        label="File name"
-        description="The .wim file WDS keeps in RemoteInstall"
-        value={fileName}
-        onChange={(event) => {
-          setFileName(event.currentTarget.value)
-          setFileNameEdited(true)
-        }}
-        required
-      />
+      {many ? (
+        <Stack gap="xs">
+          <Text size="sm" fw={500}>
+            Names, as the WDS client lists them
+          </Text>
+          {selection.images.map((image, i) => (
+            <TextInput
+              key={image.index}
+              aria-label={`Name for ${image.name}`}
+              description={`${image.index}. ${image.name} → ${suggestFileName(names[i].trim() || image.name)}`}
+              inputWrapperOrder={['input', 'description']}
+              value={names[i]}
+              onChange={(event) => {
+                const value = event.currentTarget.value
+                setNames((current) => current.map((n, j) => (j === i ? value : n)))
+              }}
+              error={names[i].trim() === '' ? 'Give it a name' : undefined}
+            />
+          ))}
+          {sameNames && (
+            <Text size="sm" c="red">
+              Give each image a different name.
+            </Text>
+          )}
+        </Stack>
+      ) : (
+        <>
+          <TextInput
+            label="Name"
+            description={kind === 'boot' ? 'Shown in the WDS boot menu' : 'Shown in the WDS client’s image list'}
+            value={name}
+            onChange={(event) => {
+              const value = event.currentTarget.value
+              setName(value)
+              if (!fileNameEdited) setFileName(suggestFileName(value))
+            }}
+            required
+          />
+          <Textarea label="Description" autosize minRows={2} value={description} onChange={(event) => setDescription(event.currentTarget.value)} />
+          <TextInput
+            label="File name"
+            description="The .wim file WDS keeps in RemoteInstall"
+            value={fileName}
+            onChange={(event) => {
+              setFileName(event.currentTarget.value)
+              setFileNameEdited(true)
+            }}
+            required
+          />
+        </>
+      )}
       {kind === 'install' && (
         <>
           <Select
@@ -365,7 +459,7 @@ function DetailsStep({
       )}
       {'upload' in source && (
         <Checkbox
-          label="Delete the uploaded file from the staging folder once it's imported"
+          label={`Delete the uploaded file from the staging folder once ${many ? 'they are' : "it's"} imported`}
           checked={deleteUpload}
           onChange={(event) => setDeleteUpload(event.currentTarget.checked)}
         />
@@ -385,8 +479,8 @@ function DetailsStep({
         <Button variant="default" onClick={onBack}>
           Back
         </Button>
-        <Button type="submit" loading={start.isPending} disabled={!ready}>
-          Start import
+        <Button type="submit" loading={start.isPending || queued !== null} disabled={!ready}>
+          {many ? `Start ${imports.length} imports` : 'Start import'}
         </Button>
       </Group>
     </DialogForm>

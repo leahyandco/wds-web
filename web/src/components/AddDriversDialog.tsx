@@ -8,6 +8,7 @@ import { architectures } from '../lib/drivers'
 import { formatBytes } from '../lib/format'
 import { ServerFilePanel, UploadPanel } from './SourcePanels'
 import { DialogForm } from './DialogForm'
+import { mayStopUploads } from '../lib/upload'
 
 const NO_GROUP = '\u0000none'
 const NEW_GROUP = '\u0000new'
@@ -31,7 +32,7 @@ interface AddDriversDialogProps {
  */
 export function AddDriversDialog({ opened, onClose, groups, initialGroup }: AddDriversDialogProps) {
   return (
-    <Modal opened={opened} onClose={onClose} size="lg" closeOnClickOutside={false} title="Add drivers">
+    <Modal opened={opened} onClose={() => mayStopUploads() && onClose()} size="lg" closeOnClickOutside={false} title="Add drivers">
       {/* Mounted afresh on each opening, so nothing carries over from the last time. */}
       {opened && <AddDriversForm groups={groups} initialGroup={initialGroup ?? null} onDone={onClose} />}
     </Modal>

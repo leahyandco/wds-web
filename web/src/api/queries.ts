@@ -28,6 +28,7 @@ import type {
   SettingsGroup,
   SettingsResult,
   TargetInfo,
+  UploadInfo,
   WdsRecord,
 } from './types'
 
@@ -137,6 +138,21 @@ export const useActivity = (hours: number) =>
     queryFn: ({ signal }) => apiGet<ActivityResponse>(`/activity?hours=${hours}`, signal),
     refetchInterval: 10_000,
   })
+
+/** Files uploaded into the staging folder on the WDS server, finished or not. */
+export const useUploads = () =>
+  useQuery({
+    queryKey: ['uploads'],
+    queryFn: ({ signal }) => apiGet<UploadInfo[]>('/uploads', signal),
+  })
+
+export const useDeleteUpload = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiSend('DELETE', `/uploads/${encodeURIComponent(id)}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['uploads'] }),
+  })
+}
 
 /** Image files already on the WDS server that could be imported. */
 export const useServerImageFiles = (enabled: boolean) =>
