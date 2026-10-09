@@ -127,6 +127,34 @@ public class BootActivityTests
     }
 
     [Fact]
+    public void Follows_a_real_BIOS_boot()
+    {
+        // As a WDS server logged an x64 BIOS client: first nobody pressed F12, then it was prestaged and someone did.
+        // wdsnbp.com, the same x86 program for every BIOS client, asks again once it knows the CPU (architecture 3).
+        var events = new[]
+        {
+            Pxe(0, arch: "1"),
+            Transfer(0, BootActivity.TftpStarted, @"boot\x86\wdsnbp.com"),
+            Transfer(0, BootActivity.TftpCompleted, @"boot\x86\wdsnbp.com"),
+            Pxe(61, arch: "1", prestaged: true),
+            Transfer(61, BootActivity.TftpStarted, @"boot\x86\wdsnbp.com"),
+            Transfer(61, BootActivity.TftpCompleted, @"boot\x86\wdsnbp.com"),
+            Pxe(63, arch: "3", prestaged: true),
+            Transfer(63, BootActivity.TftpStarted, @"boot\x64\pxeboot.n12"),
+            Transfer(63, BootActivity.TftpCompleted, @"boot\x64\pxeboot.n12"),
+            Transfer(64, BootActivity.TftpStarted, @"boot\x64\bootmgr.exe"),
+            Transfer(64, BootActivity.TftpCompleted, @"boot\x64\bootmgr.exe"),
+            Transfer(65, BootActivity.TftpStarted, @"\Tmp\x64{C50E2713-A170-4CD4-9249-7CA69DC8212E}.bcd"),
+            Transfer(65, BootActivity.TftpCompleted, @"\Tmp\x64{C50E2713-A170-4CD4-9249-7CA69DC8212E}.bcd"),
+        };
+
+        var sessions = BootActivity.Build(events, T0.AddMinutes(2));
+
+        Assert.Equal([BootStatus.BootMenu, BootStatus.BootProgram], sessions.Select(s => s.Status));
+        Assert.Equal(["x64 BIOS", "BIOS"], sessions.Select(s => s.Architecture));
+    }
+
+    [Fact]
     public void Splits_a_real_run_of_restarts_into_boots()
     {
         // As a WDS server logged a UEFI client restarted twice mid-download, then booted once it was prestaged.
@@ -379,13 +407,14 @@ public class BootActivityTests
     private static WdsEventRecord UnattendRefused(int seconds) =>
         new(T0.AddSeconds(seconds), BootActivity.UnattendBlocked, new Dictionary<string, string> { ["ClientIP"] = Ip });
 
-    private static WdsEventRecord Pxe(int seconds, string ip = Ip, string mac = Mac, bool prestaged = false) =>
+    // WDS's architecture codes, as seen: 1 from a BIOS client's PXE ROM, 3 once wdsnbp.com finds an x64 CPU, 4 for x64 UEFI.
+    private static WdsEventRecord Pxe(int seconds, string ip = Ip, string mac = Mac, bool prestaged = false, string arch = "4") =>
         new(T0.AddSeconds(seconds), BootActivity.PxeBoot, new Dictionary<string, string>
         {
             ["ClientHardwareAddress"] = mac,
             ["ClientIP"] = ip,
             ["ClientDeviceID"] = "{E8A3EFAC-201F-4E69-953E-B2DAA1E8B1B6}",
-            ["ClientArch"] = "4",
+            ["ClientArch"] = arch,
             ["ClientPrestaged"] = prestaged ? "true" : "false",
         });
 

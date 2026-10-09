@@ -284,15 +284,17 @@ public static partial class BootActivity
     /// <summary>The client's architecture and firmware, such as "x64 UEFI", from the files it fetched.</summary>
     private static string? ArchitectureOf(IReadOnlyList<Transfer> transfers)
     {
-        // The last boot file says the most: BIOS clients start with boot\x86\wdsnbp.com whatever they are.
-        if (transfers.Select(t => BootFile().Match(t.FileName)).LastOrDefault(m => m.Success) is { } boot)
+        var boots = transfers.Select(t => BootFile().Match(t.FileName)).Where(m => m.Success).ToList();
+        // The last boot file says the most. Every BIOS client starts with boot\x86\wdsnbp.com, which finds out
+        // what the client is before fetching the rest from that architecture's folder, so it says only "BIOS".
+        if (boots.LastOrDefault(m => !m.Value.EndsWith("wdsnbp.com", StringComparison.OrdinalIgnoreCase)) is { } boot)
         {
             var firmware = boot.Groups["ext"].Value.Equals("efi", StringComparison.OrdinalIgnoreCase) ? "UEFI" : "BIOS";
             return $"{ArchitectureName(boot.Groups["arch"].Value)} {firmware}";
         }
         if (transfers.Select(t => ClientBcd().Match(t.FileName)).FirstOrDefault(m => m.Success) is { } bcd)
             return ArchitectureName(bcd.Groups["arch"].Value) + (bcd.Groups["uefi"].Success ? " UEFI" : "");
-        return null;
+        return boots.Count > 0 ? "BIOS" : null;
     }
 
     private sealed class Transfer(string fileName, long? fileSize, DateTimeOffset? startedAt)
