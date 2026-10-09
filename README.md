@@ -27,7 +27,8 @@ same network, and signs people in with their Windows accounts.
   devices, network interfaces, TFTP and multicast, and the hands-free deployment override.
 - **Drivers**: add drivers from an uploaded .zip or .cab, or a folder on the server, a driver group at a
   time; create driver groups and choose which clients get them with filters on manufacturer, model,
-  chassis type and more; enable, disable, rename, regroup and remove packages, one or many at once.
+  chassis type and more; enable, disable, rename, regroup and remove packages, one or many at once;
+  and add packages to boot images, for network and storage drivers WinPE lacks.
 - **Events**: WDS's event logs, without the routine noise.
 - **Access control and audit**: Windows sign-in for the groups and users you choose, and every change
   recorded, with who made it, in the Windows event log.

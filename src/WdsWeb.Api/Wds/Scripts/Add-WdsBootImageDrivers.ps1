@@ -18,8 +18,10 @@ $failed = [Collections.Generic.List[object]]::new()
 for ($i = 0; $i -lt $total; $i++) {
     $id = $PackageIds[$i]
     Write-Progress -Activity "Adding drivers to $ImageName ($($i + 1) of $total)" -Status $id -PercentComplete ([int](100 * $i / $total))
-    $arguments = @('/Add-ImageDriverPackage', "/Image:$ImageName", '/ImageType:Boot', "/Architecture:$Architecture", "/PackageId:$id")
+    # WDSUTIL reads these in order: /Filename only counts straight after /Architecture.
+    $arguments = @('/Add-ImageDriverPackage', "/Image:$ImageName", '/ImageType:Boot', "/Architecture:$Architecture")
     if ($FileName) { $arguments += "/Filename:$FileName" }
+    $arguments += "/PackageId:$id"
     $result = Invoke-WdsUtil -Arguments $arguments
     if ($result.ExitCode -eq 0) {
         $added.Add($id)
