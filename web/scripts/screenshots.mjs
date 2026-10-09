@@ -8,7 +8,7 @@
 //
 // SCREENSHOT_URL points at another address; EDGE at another Chromium-based browser.
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,7 +31,11 @@ const shots = [
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** Starts Edge headless and returns the DevTools address it prints on stderr. */
+/**
+ * Starts Edge headless and returns its DevTools address: from what it prints on stderr, or from the
+ * DevToolsActivePort file it writes in its profile. When an update is waiting, the process started here hands
+ * over to another and exits, and only the file says where the browser is.
+ */
 async function launchEdge() {
   const profile = await mkdtemp(join(tmpdir(), 'wdsweb-edge-'))
   const browser = spawn(
@@ -50,13 +54,30 @@ async function launchEdge() {
   )
   const url = await new Promise((resolve, reject) => {
     let text = ''
+    let done = false
+    const finish = (error, value) => {
+      if (done) return
+      done = true
+      clearInterval(poll)
+      if (error) reject(error)
+      else resolve(value)
+    }
     browser.stderr.on('data', (chunk) => {
       text += chunk
       const match = /DevTools listening on (ws:\/\/\S+)/.exec(text)
-      if (match) resolve(match[1])
+      if (match) finish(null, match[1])
     })
-    browser.on('error', reject)
-    browser.on('exit', (code) => reject(new Error(`Edge exited (${code}) before it was ready:\n${text}`)))
+    const started = Date.now()
+    const poll = setInterval(async () => {
+      const port = await readFile(join(profile, 'DevToolsActivePort'), 'utf8').catch(() => null)
+      const [number, path] = port?.split(/\r?\n/) ?? []
+      if (number && path) finish(null, `ws://127.0.0.1:${number}${path}`)
+      else if (Date.now() - started > 30_000) finish(new Error(`Edge didn't start its DevTools within 30 seconds:\n${text}`))
+    }, 250)
+    browser.on('error', (error) => finish(error))
+    browser.on('exit', (code) => {
+      if (code !== 0) finish(new Error(`Edge exited (${code}) before it was ready:\n${text}`))
+    })
   })
   return { browser, profile, url }
 }
@@ -129,8 +150,9 @@ async function openRow(page, text) {
 }
 
 const { browser, profile, url } = await launchEdge()
+let cdp
 try {
-  const cdp = await connect(url)
+  cdp = await connect(url)
   for (const scheme of ['light', 'dark']) {
     // A fresh page for each theme, so that nothing carries over between them.
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' })
@@ -153,8 +175,11 @@ try {
     }
     await cdp.send('Target.closeTarget', { targetId })
   }
-  cdp.close()
 } finally {
+  // Close the browser over DevTools, since the process started here may not be the browser any more. The
+  // browser closes without answering, so don't wait long.
+  await Promise.race([cdp?.send('Browser.close').catch(() => {}), sleep(2000)])
+  cdp?.close()
   browser.kill()
   // Edge can hold its profile for a moment after exiting.
   await sleep(500)
