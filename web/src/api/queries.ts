@@ -175,6 +175,16 @@ export const useImportDrivers = () => {
   })
 }
 
+/** Writes driver packages into a boot image, as a job. */
+export const useAddBootImageDrivers = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: { imageName: string; architecture: string; fileName: string | null; packageIds: string[] }) =>
+      apiSend<ImportJob>('POST', '/boot-images/drivers', request),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+}
+
 /** A change to the driver store, refreshing it once it's made. */
 const useDriverMutation = <T>(mutationFn: (input: T) => Promise<unknown>) => {
   const queryClient = useQueryClient()

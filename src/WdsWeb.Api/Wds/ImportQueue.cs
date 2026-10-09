@@ -61,6 +61,24 @@ public sealed record DriverImportRequest(
     public string Name => Path.GetFileName(SourcePath.TrimEnd('\\')) is { Length: > 0 } name ? name : SourcePath;
 }
 
+/// <summary>
+/// Driver packages from the store to write into a boot image (WinPE), such as network and storage drivers
+/// it lacks. WDS mounts and saves the image for each one, and can't take them out again.
+/// </summary>
+/// <param name="ImageName">The boot image, with its architecture and, where the name isn't unique, its file name.</param>
+public sealed record BootImageDriversRequest(
+    string ImageName,
+    string Architecture,
+    string? FileName,
+    IReadOnlyList<string> PackageIds,
+    string? RequestedBy = null) : IImportRequest
+{
+    public string Kind => "boot-drivers";
+    public string Name => ImageName;
+    public string? UploadId => null;
+    public bool DeleteUploadAfter => false;
+}
+
 public sealed record JobLogLine(DateTimeOffset Time, string Text);
 
 /// <param name="Request">An <see cref="ImportRequest"/> or a <see cref="DriverImportRequest"/>, as itself.</param>
@@ -152,6 +170,18 @@ public sealed class ImportQueue(
                         ["TempFolder"] = tempFolder,
                     }, job.Message, job.Progress, ct);
                     summary = result.TryGetProperty("summary", out var said) ? said.GetString() : null;
+                    break;
+
+                case BootImageDriversRequest boot:
+                    logger.LogInformation("Adding {Count} driver packages to boot image {Image} for {User}", boot.PackageIds.Count, boot.ImageName, boot.RequestedBy);
+                    result = await wds.RunJobAsync("Add-WdsBootImageDrivers", new Dictionary<string, object?>
+                    {
+                        ["ImageName"] = boot.ImageName,
+                        ["Architecture"] = boot.Architecture,
+                        ["FileName"] = boot.FileName,
+                        ["PackageIds"] = boot.PackageIds.ToArray(),
+                    }, job.Message, job.Progress, ct);
+                    summary = result.TryGetProperty("summary", out var bootSaid) ? bootSaid.GetString() : null;
                     break;
 
                 default:

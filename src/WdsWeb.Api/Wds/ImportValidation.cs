@@ -28,9 +28,33 @@ public sealed record ImportDriversRequest(
     string? Architecture,
     bool DeleteUploadAfter);
 
+/// <summary>Driver packages to write into a boot image, as the UI asks for them.</summary>
+/// <param name="Architecture">The boot image's, as WDS reports it (X64) or as WDSUTIL takes it (x64).</param>
+/// <param name="FileName">Needed only when two boot images of the architecture share the name.</param>
+public sealed record AddBootImageDriversRequest(string? ImageName, string? Architecture, string? FileName, IReadOnlyList<string>? PackageIds);
+
 /// <summary>Turns what the UI asked for into an <see cref="ImportRequest"/>, or explains what's wrong with it.</summary>
 public static partial class ImportValidation
 {
+    /// <summary>The most packages one job writes into a boot image: WDS mounts and saves the image for each.</summary>
+    public const int MaxBootImageDrivers = 50;
+
+    public static BootImageDriversRequest ValidateBootImageDrivers(AddBootImageDriversRequest request, string? requestedBy = null)
+    {
+        var name = request.ImageName?.Trim() ?? "";
+        if (name.Length is 0 or > 128 || name.Contains('"') || name.Any(char.IsControl))
+            throw new InvalidRequestException("Say which boot image to add the drivers to.");
+        var architecture = WdsDriverCommands.Architecture(request.Architecture)
+            ?? throw new InvalidRequestException("Say the boot image's architecture: x86, x64, arm or arm64.");
+        var fileName = string.IsNullOrWhiteSpace(request.FileName) ? null : request.FileName.Trim();
+        if (fileName is not null && !FileNamePattern().IsMatch(fileName))
+            throw new InvalidRequestException($"\"{request.FileName}\" isn't a boot image's file name.");
+        var ids = (request.PackageIds ?? []).Select(WdsDriverCommands.PackageId).Distinct().ToList();
+        if (ids.Count == 0) throw new InvalidRequestException("Choose the driver packages to add to the boot image.");
+        if (ids.Count > MaxBootImageDrivers) throw new InvalidRequestException($"Add up to {MaxBootImageDrivers} driver packages to a boot image at a time.");
+        return new BootImageDriversRequest(name, architecture, fileName, ids, requestedBy);
+    }
+
     public static DriverImportRequest ValidateDrivers(ImportDriversRequest request, UploadStore uploads, string? requestedBy = null)
     {
         string sourcePath;

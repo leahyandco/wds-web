@@ -21,6 +21,14 @@ public static class DriverEndpoints
             return Results.Accepted($"/api/jobs/{job.Id}", job);
         });
 
+        // Writing packages into a boot image takes minutes each, so it's a job too.
+        app.MapPost("/api/boot-images/drivers", (AddBootImageDriversRequest request, HttpContext http, StagingArea staging, ImportQueue queue) =>
+        {
+            if (staging.IsDemo) throw new InvalidRequestException(Wds.Demo.DemoWds.NothingChanges);
+            var job = queue.Enqueue(ImportValidation.ValidateBootImageDrivers(request, http.User.Identity?.Name));
+            return Results.Accepted($"/api/jobs/{job.Id}", job);
+        });
+
         // .zip and .cab files of drivers already on the WDS server.
         drivers.MapGet("/files", (WdsScriptRunner wds, IOptions<WdsOptions> options, CancellationToken ct) =>
             wds.RunAsync("Find-ImageFiles", new Dictionary<string, object?>

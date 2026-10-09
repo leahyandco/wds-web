@@ -67,6 +67,36 @@ public sealed class ImportValidationTests : IDisposable
     }
 
     [Fact]
+    public void Adds_drivers_to_a_boot_image_as_wdsutil_names_it()
+    {
+        var request = ImportValidation.ValidateBootImageDrivers(new AddBootImageDriversRequest(
+            " Windows PE (x64) ", "X64", "boot-pe.wim", ["08611570-9951-4b50-a49a-f4efaebe3a0d", "{08611570-9951-4B50-A49A-F4EFAEBE3A0D}"]));
+
+        Assert.Equal(("Windows PE (x64)", "x64", "boot-pe.wim"), (request.ImageName, request.Architecture, request.FileName));
+        Assert.Equal(["{08611570-9951-4B50-A49A-F4EFAEBE3A0D}"], request.PackageIds);
+        Assert.Equal("boot-drivers", request.Kind);
+    }
+
+    [Theory]
+    [InlineData("", "x64", null)]
+    [InlineData("WinPE", "", null)]
+    [InlineData("WinPE", "x64", @"..\boot.wim")]
+    [InlineData("Win\"PE", "x64", null)]
+    public void Refuses_a_boot_image_it_cant_name(string name, string architecture, string? fileName)
+    {
+        Assert.Throws<InvalidRequestException>(() => ImportValidation.ValidateBootImageDrivers(
+            new AddBootImageDriversRequest(name, architecture, fileName, ["{08611570-9951-4B50-A49A-F4EFAEBE3A0D}"])));
+    }
+
+    [Fact]
+    public void Adds_some_but_not_too_many_drivers_to_a_boot_image()
+    {
+        Assert.Throws<InvalidRequestException>(() => ImportValidation.ValidateBootImageDrivers(new AddBootImageDriversRequest("WinPE", "x64", null, [])));
+        var many = Enumerable.Range(0, ImportValidation.MaxBootImageDrivers + 1).Select(_ => Guid.NewGuid().ToString()).ToList();
+        Assert.Throws<InvalidRequestException>(() => ImportValidation.ValidateBootImageDrivers(new AddBootImageDriversRequest("WinPE", "x64", null, many)));
+    }
+
+    [Fact]
     public void Drivers_are_uploaded_as_a_zip_or_cab()
     {
         var upload = _uploads.Create("boot.wim", 3);

@@ -45,7 +45,7 @@ export function BootImagesPage() {
           </Button>
         }
       />
-      <ImportJobs kind="boot" />
+      <ImportJobs kind={['boot', 'boot-drivers']} />
       <Card withBorder p={0}>
         <QueryState query={query}>
           {(rows) => (

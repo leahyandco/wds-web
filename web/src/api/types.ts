@@ -327,11 +327,30 @@ export interface DriverImportResult {
   driverGroup: string | null
 }
 
-export type ImportKind = ImageKind | 'drivers'
+/** Driver packages being written into a boot image. */
+export interface BootImageDriversRequest {
+  kind: 'boot-drivers'
+  /** The boot image. */
+  name: string
+  imageName: string
+  architecture: string
+  fileName: string | null
+  packageIds: string[]
+}
+
+/** What writing drivers into a boot image did. */
+export interface BootImageDriversResult {
+  summary: string
+  added: string[]
+  failed: { id: string; reason: string }[]
+  image: string
+}
+
+export type ImportKind = ImageKind | 'drivers' | 'boot-drivers'
 
 export interface ImportJob {
   id: string
-  request: ImageImportRequest | DriverImportRequest
+  request: ImageImportRequest | DriverImportRequest | BootImageDriversRequest
   status: JobStatus
   stage: string | null
   percent: number | null

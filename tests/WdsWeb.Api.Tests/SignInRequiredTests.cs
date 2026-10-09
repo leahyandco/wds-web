@@ -49,6 +49,7 @@ public sealed class SignInRequiredTests(SignInRequiredTests.ProductionApp app) :
     [InlineData("PUT", "/api/drivers/packages/{08611570-9951-4B50-A49A-F4EFAEBE3A0D}")]
     [InlineData("DELETE", "/api/drivers/packages/{08611570-9951-4B50-A49A-F4EFAEBE3A0D}")]
     [InlineData("POST", "/api/drivers/packages/batch")]
+    [InlineData("POST", "/api/boot-images/drivers")]
     [InlineData("PUT", "/api/boot-images/properties")]
     [InlineData("PUT", "/api/install-images/properties")]
     [InlineData("GET", "/api/install-images/unattend?name=Windows")]

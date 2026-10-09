@@ -3,7 +3,7 @@ import { IconAlertTriangle } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useJobs } from '../api/queries'
-import type { DriverImportResult, ImportJob, ImportKind, JobStatus } from '../api/types'
+import type { BootImageDriversResult, DriverImportResult, ImportJob, ImportKind, JobStatus } from '../api/types'
 import { formatAgo, formatDateTime, formatDuration } from '../lib/format'
 import { useNow } from '../lib/useNow'
 
@@ -15,27 +15,28 @@ const statusBadges: Record<JobStatus, { label: string; color: string }> = {
 }
 
 /** What each kind of import changes, to refresh once one finishes. */
-const refreshes: Record<ImportKind, string> = { boot: 'boot-images', install: 'install-images', drivers: 'drivers' }
+const refreshes: Record<ImportKind, string> = { boot: 'boot-images', install: 'install-images', drivers: 'drivers', 'boot-drivers': 'boot-images' }
 
-/** Imports of one kind, newest first, refreshing what they change as each one finishes. */
-export function ImportJobs({ kind }: { kind: ImportKind }) {
+/** Imports of the given kinds, newest first, refreshing what they change as each one finishes. */
+export function ImportJobs({ kind }: { kind: ImportKind | ImportKind[] }) {
+  const kinds: ImportKind[] = Array.isArray(kind) ? kind : [kind]
   const jobs = useJobs()
   const queryClient = useQueryClient()
   const now = useNow()
   const [openId, setOpenId] = useState<string | null>(null)
   const seenFinished = useRef(new Set<string>())
 
-  const mine = (jobs.data ?? []).filter((job) => job.request.kind === kind)
+  const mine = (jobs.data ?? []).filter((job) => kinds.includes(job.request.kind))
 
   useEffect(() => {
     for (const job of mine) {
       if ((job.status === 'succeeded' || job.status === 'failed') && !seenFinished.current.has(job.id)) {
         seenFinished.current.add(job.id)
-        void queryClient.invalidateQueries({ queryKey: [refreshes[kind]] })
+        void queryClient.invalidateQueries({ queryKey: [refreshes[job.request.kind]] })
         void queryClient.invalidateQueries({ queryKey: ['server-config'] })
       }
     }
-  }, [mine, kind, queryClient])
+  }, [mine, queryClient])
 
   // Recent ones only: running or queued, plus anything that finished in the last day.
   const visible = mine
@@ -101,7 +102,17 @@ function JobLog({ job }: { job: ImportJob }) {
   const request = job.request
   return (
     <Stack gap="sm">
-      {request.kind === 'drivers' ? (
+      {request.kind === 'boot-drivers' ? (
+        <>
+          <Text size="sm">
+            <b>Boot image:</b> {request.imageName} ({request.architecture})
+          </Text>
+          <Text size="sm">
+            <b>Driver packages:</b> {request.packageIds.length}
+          </Text>
+          {job.status === 'succeeded' && <BootDriversResult result={job.result as BootImageDriversResult} />}
+        </>
+      ) : request.kind === 'drivers' ? (
         <>
           <Text size="sm">
             <b>Source:</b> {request.sourcePath}
@@ -161,6 +172,28 @@ function DriverResult({ result }: { result: DriverImportResult }) {
         <Text size="sm" c="dimmed">
           Skipped for having no drivers for this architecture: {result.otherArchitecture.join(', ')}
         </Text>
+      )}
+    </>
+  )
+}
+
+/** Which driver packages went into the boot image, and which WDS refused. */
+function BootDriversResult({ result }: { result: BootImageDriversResult }) {
+  return (
+    <>
+      <Text size="sm">
+        <b>Result:</b> {result.summary}.
+      </Text>
+      {result.failed.length > 0 && (
+        <Alert color="orange" icon={<IconAlertTriangle />} title={`${result.failed.length} couldn't be added`}>
+          <List size="sm" spacing={4}>
+            {result.failed.map((f) => (
+              <List.Item key={f.id}>
+                <b>{f.id}</b>: {f.reason}
+              </List.Item>
+            ))}
+          </List>
+        </Alert>
       )}
     </>
   )

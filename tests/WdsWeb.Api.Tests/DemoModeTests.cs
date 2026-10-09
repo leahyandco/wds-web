@@ -77,6 +77,7 @@ public sealed class DemoModeTests(DemoModeTests.DemoApp app) : IClassFixture<Dem
     [InlineData("POST", "/api/uploads", """{"fileName":"boot.wim","size":1024}""")]
     [InlineData("POST", "/api/drivers/import", """{"serverPath":"C:\\Drivers\\Dell.zip","createGroup":false,"deleteUploadAfter":false}""")]
     [InlineData("POST", "/api/drivers/groups", """{"name":"Dell laptops"}""")]
+    [InlineData("POST", "/api/boot-images/drivers", """{"imageName":"WinPE","architecture":"x64","packageIds":["{08611570-9951-4B50-A49A-F4EFAEBE3A0D}"]}""")]
     [InlineData("PUT", "/api/drivers/groups/Network%20adapters", """{"enabled":false}""")]
     [InlineData("DELETE", "/api/drivers/groups/Network%20adapters", "{}")]
     [InlineData("POST", "/api/drivers/packages/batch", """{"ids":["{08611570-9951-4B50-A49A-F4EFAEBE3A0D}"],"action":"remove"}""")]

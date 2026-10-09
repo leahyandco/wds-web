@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Card,
@@ -20,9 +21,16 @@ import {
   Tooltip,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconChevronDown, IconDots, IconPencil, IconPlus, IconSearch, IconTrash, IconUpload } from '@tabler/icons-react'
+import { IconAlertTriangle, IconChevronDown, IconDots, IconPencil, IconPlus, IconSearch, IconTrash, IconUpload } from '@tabler/icons-react'
 import { useMemo, useState, type ReactNode } from 'react'
-import { useChangeDriverPackage, useDriverPackageBatch, useDrivers, useRemoveDriverGroup } from '../api/queries'
+import {
+  useAddBootImageDrivers,
+  useBootImages,
+  useChangeDriverPackage,
+  useDriverPackageBatch,
+  useDrivers,
+  useRemoveDriverGroup,
+} from '../api/queries'
 import type { DriverCatalog, DriverGroup, DriverPackage, DriverPackageAction } from '../api/types'
 import { AddDriversDialog } from '../components/AddDriversDialog'
 import { DriverGroupEditor } from '../components/DriverGroupEditor'
@@ -67,7 +75,7 @@ export function DriversPage() {
           </Group>
         }
       />
-      <ImportJobs kind="drivers" />
+      <ImportJobs kind={['drivers', 'boot-drivers']} />
       <QueryState query={query}>
         {(catalog) => <DriverStore catalog={catalog} group={group} onGroup={setGroup} onEditGroup={setEditing} />}
       </QueryState>
@@ -98,6 +106,7 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
   const [openId, setOpenId] = useState<string | null>(null)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [removing, setRemoving] = useState<DriverPackage[] | null>(null)
+  const [toBootImage, setToBootImage] = useState<DriverPackage[] | null>(null)
   const [deletingGroup, setDeletingGroup] = useState<DriverGroup | null>(null)
 
   const ungrouped = catalog.packages.filter((p) => p.groups.length === 0).length
@@ -249,6 +258,9 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
                   Take out of {currentGroup.name}
                 </Button>
               )}
+              <Button size="xs" variant="default" onClick={() => setToBootImage(selection)}>
+                Add to boot image…
+              </Button>
               <Button size="xs" variant="light" color="red" onClick={() => setRemoving(selection)}>
                 Remove from WDS…
               </Button>
@@ -370,6 +382,7 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
             busy={batch.isPending}
             onAction={(action, target) => void act([open], action, target)}
             onRemove={() => setRemoving([open])}
+            onBootImage={() => setToBootImage([open])}
           />
         )}
       </Drawer>
@@ -386,6 +399,7 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
           }
         }}
       />
+      <AddToBootImageDialog key={toBootImage?.map((p) => p.id).join()} packages={toBootImage} onClose={() => setToBootImage(null)} />
       <DeleteGroupDialog
         key={deletingGroup?.name}
         group={deletingGroup}
@@ -469,9 +483,10 @@ interface DriverDetailProps {
   busy: boolean
   onAction: (action: DriverPackageAction, group?: string) => void
   onRemove: () => void
+  onBootImage: () => void
 }
 
-function DriverDetail({ driver, groups, busy, onAction, onRemove }: DriverDetailProps) {
+function DriverDetail({ driver, groups, busy, onAction, onRemove, onBootImage }: DriverDetailProps) {
   const rename = useChangeDriverPackage()
   const [name, setName] = useState(driver.name)
   const others = groups.filter((g) => !driver.groups.includes(g.name))
@@ -569,6 +584,9 @@ function DriverDetail({ driver, groups, busy, onAction, onRemove }: DriverDetail
         </Table.Tbody>
       </Table>
       <Group>
+        <Button variant="default" onClick={onBootImage}>
+          Add to a boot image…
+        </Button>
         <Button color="red" variant="light" leftSection={<IconTrash size={16} />} onClick={onRemove}>
           Remove from WDS…
         </Button>
@@ -603,6 +621,79 @@ function RemovePackagesDialog({
           Remove
         </Button>
       </Group>
+    </Modal>
+  )
+}
+
+/**
+ * Writes driver packages into a boot image, such as network or storage drivers WinPE lacks. WDS saves the
+ * image after each package and can't take one out again, so it says so first.
+ */
+function AddToBootImageDialog({ packages, onClose }: { packages: DriverPackage[] | null; onClose: () => void }) {
+  const bootImages = useBootImages()
+  const add = useAddBootImageDrivers()
+  const architectures = [...new Set((packages ?? []).map((p) => (p.architecture ?? '').toLowerCase()))]
+  const images = (bootImages.data ?? []).filter((image) => architectures.includes(String(image.Architecture ?? '').toLowerCase()))
+  const [chosen, setChosen] = useState<string | null>(null)
+  const image = images.find((i) => `${String(i.Architecture)}|${String(i.FileName)}` === chosen) ?? null
+
+  const start = async () => {
+    if (!packages || !image) return
+    try {
+      await add.mutateAsync({
+        imageName: String(image.Name),
+        architecture: String(image.Architecture),
+        fileName: String(image.FileName),
+        packageIds: packages.map((p) => p.id),
+      })
+      notifications.show({ title: 'Adding drivers to the boot image', message: `Writing them into ${String(image.Name)}. The progress shows on this page.` })
+      onClose()
+    } catch {
+      // Shown from add.error.
+    }
+  }
+
+  return (
+    <Modal opened={packages !== null} onClose={onClose} title={`Add ${plural(packages?.length ?? 0, 'package')} to a boot image`} centered size="lg">
+      <Stack>
+        <Text size="sm">
+          For drivers WinPE needs before Windows is installed, such as network and storage drivers. WDS writes each package into the
+          boot image file, which takes a minute or two each.
+        </Text>
+        <Alert color="orange" icon={<IconAlertTriangle />}>
+          WDS can’t take drivers out of a boot image again. To undo this, import the boot image again.
+        </Alert>
+        {architectures.length > 1 ? (
+          <Alert color="red" icon={<IconAlertTriangle />}>
+            These packages are for different architectures ({architectures.join(', ')}). Choose packages for one architecture.
+          </Alert>
+        ) : (
+          <Select
+            label="Boot image"
+            placeholder={bootImages.isPending ? 'Loading boot images…' : images.length === 0 ? `No ${architectures[0]} boot images` : 'Choose a boot image'}
+            data={images.map((i) => ({
+              value: `${String(i.Architecture)}|${String(i.FileName)}`,
+              label: `${String(i.Name)} (${String(i.FileName)}${i.Enabled === false ? ', disabled' : ''})`,
+            }))}
+            value={chosen}
+            onChange={setChosen}
+            comboboxProps={{ withinPortal: true }}
+          />
+        )}
+        {add.error && (
+          <Alert color="red" icon={<IconAlertTriangle />}>
+            {add.error.message}
+          </Alert>
+        )}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={start} loading={add.isPending} disabled={!image || architectures.length > 1}>
+            Add to boot image
+          </Button>
+        </Group>
+      </Stack>
     </Modal>
   )
 }
