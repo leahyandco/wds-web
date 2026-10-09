@@ -40,10 +40,14 @@ import { DialogForm } from '../components/DialogForm'
 import { DriverGroupEditor } from '../components/DriverGroupEditor'
 import { ImportJobs } from '../components/ImportJobs'
 import { PageHeader } from '../components/PageHeader'
+import { SortableTh } from '../components/SortableTh'
 import { QueryState } from '../components/QueryState'
 import { describeFilter } from '../lib/drivers'
-import { EMPTY, formatDate, formatDateTime } from '../lib/format'
+import { showDone } from '../lib/notify'
+import { EMPTY, formatDate, formatDateTime, formatDay } from '../lib/format'
+import { sortFromParams, sortRows, sortToParams } from '../lib/sort'
 import { useUrlParams } from '../lib/urlState'
+import { openOnKey } from '../lib/keys'
 
 const PAGE_SIZE = 50
 const ALL = '\u0000all'
@@ -53,6 +57,17 @@ const failed = (title: string, error: unknown) =>
   notifications.show({ color: 'red', title, message: error instanceof Error ? error.message : String(error) })
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`
+
+/** What each sortable column sorts by. */
+const sortValues: Record<string, (p: DriverPackage) => unknown> = {
+  name: (p) => p.name,
+  class: (p) => p.className,
+  arch: (p) => p.architecture,
+  version: (p) => p.version,
+  date: (p) => p.date,
+  added: (p) => p.dateAdded,
+  status: (p) => p.enabled,
+}
 
 export function DriversPage() {
   const query = useDrivers()
@@ -132,8 +147,12 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
       (!driverClass || (p.className ?? 'Unknown') === driverClass) &&
       (!needle || [p.name, p.provider, p.version, p.infPath, p.className].some((v) => v?.toLowerCase().includes(needle))),
   )
-  const pages = Math.max(1, Math.ceil(matching.length / PAGE_SIZE))
-  const shown = matching.slice((Math.min(page, pages) - 1) * PAGE_SIZE, Math.min(page, pages) * PAGE_SIZE)
+  // The sort is in the address too; without one, packages are in the order WDS lists them.
+  const sort = sortFromParams(params)
+  const sorted = sort && sortValues[sort.key] ? sortRows(matching, sortValues[sort.key], sort.descending) : matching
+  const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const shown = sorted.slice((Math.min(page, pages) - 1) * PAGE_SIZE, Math.min(page, pages) * PAGE_SIZE)
+  const onSort = (next: { key: string; descending: boolean }) => update({ ...sortToParams(next), page: null })
   // The packages chosen among those listed: the bar acts only on what the group, class and search show, and a
   // refresh may have removed some.
   const selection = matching.filter((p) => chosen.has(p.id))
@@ -159,8 +178,24 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
   const allShown = shown.length > 0 && shown.every((p) => chosen.has(p.id))
   const someShown = shown.some((p) => chosen.has(p.id))
 
-  /** Runs one action on packages, saying what came of it. */
+  /** Runs one action on packages, saying what came of it, with Undo for the packages it changed. */
   const act = async (packages: DriverPackage[], action: DriverPackageAction, target?: string) => {
+    // Only these change, so only these change back: a package already enabled stays enabled on undoing "Enable".
+    const changes: Record<DriverPackageAction, (p: DriverPackage) => boolean> = {
+      enable: (p) => !p.enabled,
+      disable: (p) => p.enabled,
+      addToGroup: (p) => !p.groups.includes(target ?? ''),
+      removeFromGroup: (p) => p.groups.includes(target ?? ''),
+      remove: () => true,
+    }
+    const changed = packages.filter(changes[action])
+    const opposite: Partial<Record<DriverPackageAction, DriverPackageAction>> = {
+      enable: 'disable',
+      disable: 'enable',
+      addToGroup: 'removeFromGroup',
+      removeFromGroup: 'addToGroup',
+    }
+    const undo = opposite[action]
     try {
       await batch.mutateAsync({ ids: packages.map((p) => p.id), action, group: target })
       const what = packages.length === 1 ? packages[0].name : plural(packages.length, 'package')
@@ -171,7 +206,10 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
         addToGroup: `Added ${what} to ${target}`,
         removeFromGroup: `Took ${what} out of ${target}`,
       }
-      notifications.show({ color: 'green', message: done[action] })
+      showDone(
+        done[action],
+        undo && changed.length > 0 ? () => batch.mutateAsync({ ids: changed.map((p) => p.id), action: undo, group: target }) : undefined,
+      )
       return true
     } catch (error) {
       failed('The driver store didn’t change as asked', error)
@@ -296,7 +334,7 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
             {catalog.packages.length === 0 ? 'The driver store is empty. Add drivers to start it.' : 'No driver packages match.'}
           </Text>
         ) : (
-          <Table.ScrollContainer minWidth={960}>
+          <Table.ScrollContainer minWidth={1060}>
             <Table striped highlightOnHover verticalSpacing="xs">
               <Table.Thead>
                 <Table.Tr>
@@ -308,13 +346,14 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
                       aria-label="Choose the packages on this page"
                     />
                   </Table.Th>
-                  <Table.Th>Package</Table.Th>
-                  <Table.Th>Class</Table.Th>
-                  <Table.Th>Arch</Table.Th>
-                  <Table.Th>Version</Table.Th>
-                  <Table.Th>Driver date</Table.Th>
+                  <SortableTh label="Package" sortKey="name" sort={sort} onSort={onSort} />
+                  <SortableTh label="Class" sortKey="class" sort={sort} onSort={onSort} />
+                  <SortableTh label="Arch" sortKey="arch" sort={sort} onSort={onSort} />
+                  <SortableTh label="Version" sortKey="version" sort={sort} onSort={onSort} />
+                  <SortableTh label="Driver date" sortKey="date" sort={sort} onSort={onSort} />
+                  <SortableTh label="Added" sortKey="added" sort={sort} onSort={onSort} />
                   <Table.Th>Groups</Table.Th>
-                  <Table.Th>Status</Table.Th>
+                  <SortableTh label="Status" sortKey="status" sort={sort} onSort={onSort} />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -324,7 +363,7 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
                     tabIndex={0}
                     style={{ cursor: 'pointer' }}
                     onClick={() => setOpenId(p.id)}
-                    onKeyDown={(event) => event.key === 'Enter' && setOpenId(p.id)}
+                    onKeyDown={openOnKey(() => setOpenId(p.id))}
                   >
                     <Table.Td onClick={(event) => event.stopPropagation()}>
                       <Checkbox checked={chosen.has(p.id)} onChange={(event) => toggle([p.id], event.currentTarget.checked)} aria-label={`Choose ${p.name}`} />
@@ -348,6 +387,9 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
                     </Table.Td>
                     <Table.Td style={{ whiteSpace: 'nowrap' }}>
                       <Text size="sm">{formatDate(p.date)}</Text>
+                    </Table.Td>
+                    <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                      <Text size="sm">{formatDay(p.dateAdded)}</Text>
                     </Table.Td>
                     <Table.Td>
                       <Group gap={4}>

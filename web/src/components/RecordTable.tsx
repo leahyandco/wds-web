@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import type { WdsRecord } from '../api/types'
 import { formatValue } from '../lib/format'
 import { PropertyList } from './PropertyList'
+import { openOnKey } from '../lib/keys'
 
 export interface RecordColumn {
   key: string
@@ -57,7 +58,7 @@ export function RecordTable({ rows, rowKey, columns, empty, detailTitle }: Recor
                 tabIndex={0}
                 style={{ cursor: 'pointer' }}
                 onClick={() => setSelected(row)}
-                onKeyDown={(event) => event.key === 'Enter' && setSelected(row)}
+                onKeyDown={openOnKey(() => setSelected(row))}
               >
                 {columns.map((column) => (
                   <Table.Td key={column.key} style={column.nowrap ? { whiteSpace: 'nowrap' } : undefined}>

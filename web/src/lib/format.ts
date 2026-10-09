@@ -1,4 +1,5 @@
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const dateTimeSeconds = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
 const dateOnly = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' })
 const isoDate = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
 
@@ -8,6 +9,22 @@ export function formatDateTime(value: string | null | undefined): string {
   if (!value) return EMPTY
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : dateTime.format(date)
+}
+
+/** A date and time to the second, for events, logs and timelines, where several fall in one minute. */
+export function formatDateTimeSeconds(value: string | null | undefined): string {
+  if (!value) return EMPTY
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : dateTimeSeconds.format(date)
+}
+
+const localDay = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
+
+/** The day something happened, in local time, where its time of day doesn't matter (when a driver was added, say). */
+export function formatDay(value: string | null | undefined): string {
+  if (!value) return EMPTY
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : localDay.format(date)
 }
 
 /** A date without its time, e.g. a driver's release date, which carries no meaningful time of day. */

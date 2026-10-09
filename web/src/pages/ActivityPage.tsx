@@ -13,9 +13,10 @@ import { QueryState } from '../components/QueryState'
 import { architectureLabel, bootStatus, clientAddress, imageSeconds } from '../lib/boot'
 import { deploymentStage } from '../lib/deployments'
 import { bootImageName, prestagedDevice } from '../lib/devices'
-import { EMPTY, formatAgo, formatBytes, formatDateTime } from '../lib/format'
+import { EMPTY, formatAgo, formatBytes, formatDateTime, formatDateTimeSeconds } from '../lib/format'
 import { useUrlParams } from '../lib/urlState'
 import { findValue, isYes } from '../lib/wdsutil'
+import { openOnKey } from '../lib/keys'
 
 const ranges = [
   { label: '24 hours', value: '24' },
@@ -216,7 +217,7 @@ function SessionTable({ sessions, names, unattendExpected, onSelect }: SessionTa
                 tabIndex={0}
                 style={{ cursor: 'pointer' }}
                 onClick={() => onSelect(session)}
-                onKeyDown={(e) => e.key === 'Enter' && onSelect(session)}
+                onKeyDown={openOnKey(() => onSelect(session))}
               >
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>
                   <Text size="sm">{formatDateTime(session.firstSeen)}</Text>
@@ -322,8 +323,8 @@ function SessionDetail({ session, device, imageName, unattendExpected, standalon
     { label: 'Architecture', value: architectureLabel(session) },
     { label: 'Boot image', value: imageName ?? EMPTY },
     { label: 'Prestaged when it booted', value: session.prestaged == null ? EMPTY : session.prestaged ? 'Yes' : 'No' },
-    { label: 'First seen', value: formatDateTime(session.firstSeen) },
-    { label: 'Last seen', value: formatDateTime(session.lastSeen) },
+    { label: 'First seen', value: formatDateTimeSeconds(session.firstSeen) },
+    { label: 'Last seen', value: formatDateTimeSeconds(session.lastSeen) },
   ]
 
   return (
@@ -486,7 +487,7 @@ function DeploymentDetail({ deployment, standalone }: { deployment: Deployment; 
         {deployment.timeline.map((note, index) => (
           <Timeline.Item key={index} color={note.level === 'error' ? 'red' : note.level === 'warning' ? 'orange' : 'blue'} title={note.text}>
             <Text size="xs" c="dimmed">
-              {formatDateTime(note.time)}
+              {formatDateTimeSeconds(note.time)}
             </Text>
           </Timeline.Item>
         ))}

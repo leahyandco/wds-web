@@ -4,7 +4,7 @@ import { IconAlertTriangle } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useCancelJob, useJobs, useRetryJob } from '../api/queries'
 import type { BootImageDriversResult, DriverImportResult, ImportJob, ImportKind } from '../api/types'
-import { formatAgo, formatDateTime, formatDuration } from '../lib/format'
+import { formatAgo, formatDateTimeSeconds, formatDuration } from '../lib/format'
 import { isActive, jobStatusLabel } from '../lib/jobs'
 import { useNow } from '../lib/useNow'
 import { CopyCode } from './Copy'
@@ -155,7 +155,7 @@ function JobLog({ job }: { job: ImportJob }) {
         </>
       )}
       <CopyCode
-        value={job.log.length === 0 ? 'Nothing logged yet.' : job.log.map((line) => `${formatDateTime(line.time)}  ${line.text}`).join('\n')}
+        value={job.log.length === 0 ? 'Nothing logged yet.' : job.log.map((line) => `${formatDateTimeSeconds(line.time)}  ${line.text}`).join('\n')}
         label="Copy the log"
       />
     </Stack>

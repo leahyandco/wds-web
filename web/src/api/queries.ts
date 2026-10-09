@@ -51,16 +51,12 @@ export const useSignIn = () => {
   })
 }
 
-export const useSignOut = () => {
-  const queryClient = useQueryClient()
-  return useMutation({
+/** Signs out and starts the page afresh, at the sign-in page with nothing of the session left in memory. */
+export const useSignOut = () =>
+  useMutation({
     mutationFn: () => apiSend('POST', '/auth/logout'),
-    onSuccess: () => {
-      queryClient.clear()
-      void queryClient.invalidateQueries({ queryKey: ['session'] })
-    },
+    onSuccess: () => window.location.assign('/'),
   })
-}
 
 export const useConnection = () =>
   useQuery({

@@ -7,8 +7,9 @@ import { CopyCode } from '../components/Copy'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { eventKey, isProblem, levelColor, levelLabel, sourceLabel } from '../lib/events'
-import { formatDateTime, plural } from '../lib/format'
+import { formatDateTimeSeconds, plural } from '../lib/format'
 import { useUrlParams } from '../lib/urlState'
+import { openOnKey } from '../lib/keys'
 
 const ranges = [
   { label: '24 hours', value: '24' },
@@ -162,10 +163,10 @@ function EventTable({ events, onSelect }: { events: WdsEvent[]; onSelect: (event
               tabIndex={0}
               style={{ cursor: 'pointer' }}
               onClick={() => onSelect(event)}
-              onKeyDown={(e) => e.key === 'Enter' && onSelect(event)}
+              onKeyDown={openOnKey(() => onSelect(event))}
             >
               <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                <Text size="sm">{formatDateTime(event.time)}</Text>
+                <Text size="sm">{formatDateTimeSeconds(event.time)}</Text>
               </Table.Td>
               <Table.Td>
                 <Badge variant="light" color={levelColor(event.level)} tt="none">
@@ -199,7 +200,7 @@ function EventDetail({ event }: { event: WdsEvent }) {
           {levelLabel(event)}
         </Badge>
         <Text size="sm" c="dimmed">
-          {formatDateTime(event.time)}
+          {formatDateTimeSeconds(event.time)}
         </Text>
       </Group>
       <Text size="sm">

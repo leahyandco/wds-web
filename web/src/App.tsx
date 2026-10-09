@@ -1,7 +1,7 @@
 import { Alert, Button, Center, Loader, Text } from '@mantine/core'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Route, Routes } from 'react-router'
 import { SIGNED_OUT_EVENT } from './api/client'
 import { useSession } from './api/queries'
@@ -16,7 +16,7 @@ import { EventsPage } from './pages/EventsPage'
 import { InstallImagesPage } from './pages/InstallImagesPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ServerSettingsPage } from './pages/ServerSettingsPage'
-import { SignInPage } from './pages/SignInPage'
+import { SignInAgain, SignInPage } from './pages/SignInPage'
 
 export function App() {
   const session = useSession()
@@ -30,6 +30,11 @@ export function App() {
     return () => window.removeEventListener(SIGNED_OUT_EVENT, signedOut)
   }, [queryClient])
 
+  // Who was signed in on this page, if anyone: once someone has been, a lost session is a sign-in over the
+  // page rather than a page of its own, so what's open underneath survives it.
+  const [lastUser, setLastUser] = useState<string | null | undefined>(undefined)
+  if (session.data?.authenticated && lastUser !== (session.data.userName ?? null)) setLastUser(session.data.userName ?? null)
+
   if (session.isPending) {
     return (
       <Center mih="100vh">
@@ -38,11 +43,20 @@ export function App() {
     )
   }
   if (session.isError) return <ServiceUnreachable message={session.error.message} onRetry={session.refetch} retrying={session.isFetching} />
-  if (!session.data.authenticated) return <SignInPage server={session.data.server} />
+  if (!session.data.authenticated && lastUser === undefined) return <SignInPage server={session.data.server} />
 
   return (
+    <>
+      {!session.data.authenticated && <SignInAgain server={session.data.server} userName={lastUser ?? null} />}
+      <AppRoutes session={session.data} />
+    </>
+  )
+}
+
+function AppRoutes({ session }: { session: SessionInfo }) {
+  return (
     <Routes>
-      <Route element={<AppLayout session={session.data} />}>
+      <Route element={<AppLayout session={session} />}>
         <Route index element={<DashboardPage />} />
         <Route path="activity" element={<ActivityPage />} />
         <Route path="boot-images" element={<BootImagesPage />} />
