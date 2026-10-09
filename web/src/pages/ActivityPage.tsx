@@ -1,7 +1,7 @@
 import { Alert, Anchor, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, TextInput, Timeline, Title } from '@mantine/core'
 import { IconAlertTriangle, IconDeviceDesktopPlus, IconInfoCircle, IconSearch } from '@tabler/icons-react'
 import { useState, type ReactNode } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { Link } from 'react-router'
 import { useActivity, useBootImages, useDevices, useServerConfig } from '../api/queries'
 import type { BootSession, Deployment, TftpTransfer, WdsRecord } from '../api/types'
 import { BootStatusBadge } from '../components/BootStatusBadge'
@@ -14,6 +14,7 @@ import { architectureLabel, bootStatus, clientAddress, imageSeconds } from '../l
 import { deploymentStage } from '../lib/deployments'
 import { bootImageName, prestagedDevice } from '../lib/devices'
 import { EMPTY, formatAgo, formatBytes, formatDateTime } from '../lib/format'
+import { useUrlParams } from '../lib/urlState'
 import { findValue, isYes } from '../lib/wdsutil'
 
 const ranges = [
@@ -21,6 +22,7 @@ const ranges = [
   { label: '3 days', value: '72' },
   { label: '7 days', value: '168' },
 ]
+const DEFAULT_RANGE = '72'
 
 /** What the page knows about a boot beyond the boot itself, from the device and boot image lists. */
 interface BootNames {
@@ -58,9 +60,10 @@ function matches(session: BootSession, names: BootNames, needle: string) {
 }
 
 export function ActivityPage() {
-  const [hours, setHours] = useState('72')
-  // The open boot and the search are in the address, so they survive a reload and other pages can link to a boot.
-  const [params, setParams] = useSearchParams()
+  // The range, the search and the open boot are in the address, so they survive a reload and other pages can
+  // link to a boot.
+  const [params, update] = useUrlParams()
+  const hours = params.get('range') ?? DEFAULT_RANGE
   const bootId = params.get('boot')
   // The box keeps its own text, as the address updates a moment later; reading it back would drop keystrokes.
   const [search, setSearch] = useState(() => params.get('q') ?? '')
@@ -81,17 +84,6 @@ export function ActivityPage() {
   const unattendExpected = (session: BootSession) =>
     serverUnattend || String(names.device(session)?.WdsClientUnattend ?? '').trim() !== ''
 
-  const setParam = (name: string, value: string | null) =>
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current)
-        if (value) next.set(name, value)
-        else next.delete(name)
-        return next
-      },
-      { replace: true },
-    )
-
   // The open boot follows each refresh, so an install being watched moves on. If a refresh no longer has the
   // boot (after choosing a shorter range, say), the last copy stays open.
   const found = bootId ? query.data?.sessions.find((session) => session.id === bootId) : undefined
@@ -109,7 +101,7 @@ export function ActivityPage() {
         refreshing={query.isFetching}
       />
       <Group mb="md" gap="sm">
-        <SegmentedControl data={ranges} value={hours} onChange={setHours} />
+        <SegmentedControl data={ranges} value={hours} onChange={(value) => update({ range: value === DEFAULT_RANGE ? null : value })} />
         <TextInput
           placeholder="Search MAC, IP, name, image or status"
           aria-label="Search boots"
@@ -117,7 +109,7 @@ export function ActivityPage() {
           value={search}
           onChange={(event) => {
             setSearch(event.currentTarget.value)
-            setParam('q', event.currentTarget.value || null)
+            update({ q: event.currentTarget.value })
           }}
           style={{ flex: 1, minWidth: 220 }}
         />
@@ -154,7 +146,7 @@ export function ActivityPage() {
                     sessions={visible}
                     names={names}
                     unattendExpected={unattendExpected}
-                    onSelect={(session) => setParam('boot', session.id)}
+                    onSelect={(session) => update({ boot: session.id })}
                   />
                 )}
               </Card>
@@ -165,7 +157,7 @@ export function ActivityPage() {
 
       <Drawer
         opened={selected !== null}
-        onClose={() => setParam('boot', null)}
+        onClose={() => update({ boot: null })}
         position="right"
         size="xl"
         title={selected ? `Boot from ${selectedDevice ? String(selectedDevice.DeviceName) : (selected.macAddress ?? selected.clientIp)}` : undefined}

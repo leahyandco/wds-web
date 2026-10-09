@@ -294,7 +294,7 @@ export interface ImportRequestBody {
   deleteUploadAfter?: boolean
 }
 
-export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 export interface ImageImportRequest {
   kind: ImageKind

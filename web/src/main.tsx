@@ -20,9 +20,10 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="auto">
-      <Notifications />
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
+          {/* Inside the router, so a notification can link to a page. */}
+          <Notifications />
           <App />
         </BrowserRouter>
       </QueryClientProvider>

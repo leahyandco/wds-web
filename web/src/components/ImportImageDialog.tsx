@@ -22,7 +22,7 @@ import { useState } from 'react'
 import { useInspectImage, useServerConfig, useServerImageFiles, useStartImport } from '../api/queries'
 import type { ImageEntry, ImageFileEntry, ImageFileInfo, ImageKind, UploadInfo } from '../api/types'
 import { formatBytes, suggestFileName } from '../lib/format'
-import { releaseTag, windowsRelease } from '../lib/windows'
+import { isBlockedSetup, releaseTag, windowsRelease } from '../lib/windows'
 import { ServerFilePanel, UploadPanel } from './SourcePanels'
 import { DialogForm } from './DialogForm'
 
@@ -244,6 +244,13 @@ function ChooseStep({
             ))}
           </Stack>
         </ScrollArea.Autosize>
+      )}
+      {kind === 'boot' && selection && isBlockedSetup(selection.image) && (
+        <Alert color="orange" icon={<IconAlertTriangle />} title="Windows 11's own Setup won't run the WDS client">
+          Clients can boot this image, but its Setup shows a deprecation notice where the WDS client should be, and the PC
+          restarts. Every boot image from Windows 11 or Windows Server 2025 media does this. To install Windows over WDS,
+          import the boot.wim from Windows 10 media (22H2) instead: its Setup runs the WDS client and installs Windows 11 too.
+        </Alert>
       )}
       <Group justify="space-between">
         <Button variant="default" onClick={onBack}>

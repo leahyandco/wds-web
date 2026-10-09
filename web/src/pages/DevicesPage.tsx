@@ -1,7 +1,7 @@
 import { Alert, Anchor, Badge, Button, Card, Group, Stack, Tabs, Text } from '@mantine/core'
 import { IconAlertTriangle, IconInfoCircle, IconPlus } from '@tabler/icons-react'
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { Link } from 'react-router'
 import { useBootImages, useDevices } from '../api/queries'
 import type { WdsRecord } from '../api/types'
 import { CopyValue } from '../components/Copy'
@@ -13,6 +13,7 @@ import { RecordTable, type RecordColumn } from '../components/RecordTable'
 import { approvedRequestFor, bootImageName, devicePrompt } from '../lib/devices'
 import { formatValue } from '../lib/format'
 import { asString, pick } from '../lib/records'
+import { useUrlParams } from '../lib/urlState'
 
 const statusColors: Record<string, string> = { Pending: 'yellow', Approved: 'green', Denied: 'red' }
 
@@ -26,7 +27,7 @@ export function DevicesPage() {
   const [editing, setEditing] = useState<WdsRecord | null | undefined>(undefined)
   // The tab is in the address, so the dashboard can open the requests. Without one, the page opens on the
   // requests if any are waiting when it loads; later arrivals don't switch tabs under you.
-  const [params, setParams] = useSearchParams()
+  const [params, update] = useUrlParams()
   const [firstTab, setFirstTab] = useState<string | null>(null)
   const pending = query.data?.autoAdd.filter((request) => request.Status === 'Pending').length ?? 0
   if (firstTab === null && query.data) setFirstTab(pending > 0 ? 'requests' : 'prestaged')
@@ -107,7 +108,7 @@ export function DevicesPage() {
                 {error}
               </Alert>
             ))}
-            <Tabs value={tab} onChange={(value) => value && setParams({ tab: value }, { replace: true })}>
+            <Tabs value={tab} onChange={(value) => update({ tab: value })}>
               <Tabs.List>
                 <Tabs.Tab value="prestaged">Prestaged ({devices.prestaged.length})</Tabs.Tab>
                 <Tabs.Tab

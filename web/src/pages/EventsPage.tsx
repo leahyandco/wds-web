@@ -1,7 +1,6 @@
 import { Alert, Badge, Button, Card, Drawer, Group, SegmentedControl, Stack, Switch, Table, Text, TextInput } from '@mantine/core'
 import { IconAlertTriangle, IconInfoCircle, IconSearch } from '@tabler/icons-react'
 import { useState } from 'react'
-import { useSearchParams } from 'react-router'
 import { useEvents } from '../api/queries'
 import type { WdsEvent } from '../api/types'
 import { CopyCode } from '../components/Copy'
@@ -9,6 +8,7 @@ import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { eventKey, isProblem, levelColor, levelLabel, sourceLabel } from '../lib/events'
 import { formatDateTime, plural } from '../lib/format'
+import { useUrlParams } from '../lib/urlState'
 
 const ranges = [
   { label: '24 hours', value: '24' },
@@ -16,31 +16,23 @@ const ranges = [
   { label: '7 days', value: '168' },
   { label: '30 days', value: '720' },
 ]
+const DEFAULT_RANGE = '72'
 
 /** How many events to fetch, newest first: a page's worth, then more on asking, up to what the server allows. */
 const limits = [300, 1000, 5000]
 
 export function EventsPage() {
-  const [hours, setHours] = useState('72')
-  // The level filter and the open event are in the address, so the dashboard can link to a problem.
-  const [params, setParams] = useSearchParams()
+  // The filters and the open event are in the address, so they survive a reload and the dashboard can link to a
+  // problem. The search box keeps its own text, as the address updates a moment later.
+  const [params, update] = useUrlParams()
+  const hours = params.get('range') ?? DEFAULT_RANGE
   const problemsOnly = params.get('level') === 'problems'
+  const includeRoutine = params.get('routine') === '1'
   const openKey = params.get('event')
-  const [search, setSearch] = useState('')
-  const [includeRoutine, setIncludeRoutine] = useState(false)
+  const [search, setSearch] = useState(() => params.get('q') ?? '')
   const [max, setMax] = useState(limits[0])
   const query = useEvents(Number(hours), { includeRoutine, problemsOnly, max })
 
-  const setParam = (name: string, value: string | null) =>
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current)
-        if (value) next.set(name, value)
-        else next.delete(name)
-        return next
-      },
-      { replace: true },
-    )
 
   // The open event as last loaded; it stays open if a refresh or another filter no longer lists it.
   const found = openKey ? query.data?.events.find((event) => eventKey(event) === openKey) : undefined
@@ -58,27 +50,30 @@ export function EventsPage() {
       />
 
       <Group mb="md" gap="sm">
-        <SegmentedControl data={ranges} value={hours} onChange={setHours} />
+        <SegmentedControl data={ranges} value={hours} onChange={(value) => update({ range: value === DEFAULT_RANGE ? null : value })} />
         <SegmentedControl
           data={[
             { label: 'All levels', value: 'all' },
             { label: 'Errors and warnings', value: 'problems' },
           ]}
           value={problemsOnly ? 'problems' : 'all'}
-          onChange={(value) => setParam('level', value === 'problems' ? 'problems' : null)}
+          onChange={(value) => update({ level: value === 'problems' ? 'problems' : null })}
         />
         <TextInput
           placeholder="Search messages, IDs and sources"
           aria-label="Search events"
           leftSection={<IconSearch size={16} />}
           value={search}
-          onChange={(event) => setSearch(event.currentTarget.value)}
+          onChange={(event) => {
+            setSearch(event.currentTarget.value)
+            update({ q: event.currentTarget.value })
+          }}
           style={{ flex: 1, minWidth: 220 }}
         />
         <Switch
           label="Routine events"
           checked={includeRoutine}
-          onChange={(event) => setIncludeRoutine(event.currentTarget.checked)}
+          onChange={(event) => update({ routine: event.currentTarget.checked ? '1' : null })}
         />
       </Group>
 
@@ -120,7 +115,7 @@ export function EventsPage() {
                     No events match.
                   </Text>
                 ) : (
-                  <EventTable events={visible} onSelect={(event) => setParam('event', eventKey(event))} />
+                  <EventTable events={visible} onSelect={(event) => update({ event: eventKey(event) })} />
                 )}
               </Card>
               {routineHidden > 0 && !problemsOnly && (
@@ -136,7 +131,7 @@ export function EventsPage() {
 
       <Drawer
         opened={selected !== null}
-        onClose={() => setParam('event', null)}
+        onClose={() => update({ event: null })}
         position="right"
         size="lg"
         title={selected ? `Event ${selected.id}` : undefined}

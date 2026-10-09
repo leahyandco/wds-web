@@ -164,6 +164,24 @@ export const useJobs = () =>
       query.state.data?.some((job) => job.status === 'queued' || job.status === 'running') ? 2_000 : 15_000,
   })
 
+/** Takes a queued job off the queue before it starts. */
+export const useCancelJob = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiSend<ImportJob>('DELETE', `/jobs/${encodeURIComponent(id)}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+}
+
+/** Queues a failed or cancelled job's import again, as a new job. */
+export const useRetryJob = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiSend<ImportJob>('POST', `/jobs/${encodeURIComponent(id)}/retry`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+}
+
 export const useStartImport = () => {
   const queryClient = useQueryClient()
   return useMutation({

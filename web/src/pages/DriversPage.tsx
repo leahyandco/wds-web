@@ -43,6 +43,7 @@ import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { describeFilter } from '../lib/drivers'
 import { EMPTY, formatDate, formatDateTime } from '../lib/format'
+import { useUrlParams } from '../lib/urlState'
 
 const PAGE_SIZE = 50
 const ALL = '\u0000all'
@@ -58,7 +59,11 @@ export function DriversPage() {
   const [adding, setAdding] = useState(false)
   // undefined: closed; null: creating a group; a group: changing it.
   const [editing, setEditing] = useState<DriverGroup | null | undefined>(undefined)
-  const [group, setGroup] = useState<string>(ALL)
+  // The group, class, search and page are in the address, so a reload or a link keeps them.
+  const [params, update] = useUrlParams()
+  const group = params.get('nogroup') === '1' ? UNGROUPED : (params.get('group') ?? ALL)
+  const setGroup = (value: string) =>
+    update({ group: value === ALL || value === UNGROUPED ? null : value, nogroup: value === UNGROUPED ? '1' : null, page: null })
   const groups = query.data?.groups ?? []
 
   return (
@@ -104,9 +109,12 @@ interface DriverStoreProps {
 
 function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps) {
   const batch = useDriverPackageBatch()
-  const [driverClass, setDriverClass] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const [params, update] = useUrlParams()
+  const driverClass = params.get('class')
+  // The box keeps its own text, as the address updates a moment later.
+  const [search, setSearch] = useState(() => params.get('q') ?? '')
+  const page = Math.max(1, Number(params.get('page')) || 1)
+  const setPage = (value: number) => update({ page: value > 1 ? String(value) : null })
   const [openId, setOpenId] = useState<string | null>(null)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [removing, setRemoving] = useState<DriverPackage[] | null>(null)
@@ -139,10 +147,6 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
   }
   const open = catalog.packages.find((p) => p.id === openId) ?? null
 
-  const filterChanged = <T,>(set: (value: T) => void) => (value: T) => {
-    set(value)
-    setPage(1)
-  }
   const toggle = (ids: string[], on: boolean) =>
     setChosen((previous) => {
       const next = new Set(previous)
@@ -197,7 +201,7 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
   return (
     <Stack>
       <SimpleGrid cols={{ base: 2, sm: 3, lg: catalog.groups.length + 2 > 6 ? 6 : catalog.groups.length + 2 }}>
-        <GroupCard label="All packages" count={catalog.packages.length} active={group === ALL} onClick={() => filterChanged(onGroup)(ALL)} />
+        <GroupCard label="All packages" count={catalog.packages.length} active={group === ALL} onClick={() => onGroup(ALL)} />
         {catalog.groups.map((g) => (
           <GroupCard
             key={g.name}
@@ -205,11 +209,11 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
             count={g.packageCount}
             detail={g.enabled ? `${g.applicability ?? 'Matched'}${g.filters.length > 0 ? ` · ${plural(g.filters.length, 'filter')}` : ''}` : 'Disabled'}
             active={group === g.name}
-            onClick={() => filterChanged(onGroup)(g.name)}
+            onClick={() => onGroup(g.name)}
             menu={groupMenu(g)}
           />
         ))}
-        <GroupCard label="In no group" count={ungrouped} active={group === UNGROUPED} onClick={() => filterChanged(onGroup)(UNGROUPED)} />
+        <GroupCard label="In no group" count={ungrouped} active={group === UNGROUPED} onClick={() => onGroup(UNGROUPED)} />
       </SimpleGrid>
 
       {currentGroup && <GroupSummary group={currentGroup} onEdit={() => onEditGroup(currentGroup)} />}
@@ -219,14 +223,17 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
           placeholder="Search names, providers, versions and INF paths"
           leftSection={<IconSearch size={16} />}
           value={search}
-          onChange={(event) => filterChanged(setSearch)(event.currentTarget.value)}
+          onChange={(event) => {
+            setSearch(event.currentTarget.value)
+            update({ q: event.currentTarget.value, page: null })
+          }}
           style={{ flex: 1, minWidth: 240 }}
         />
         <Select
           placeholder="All classes"
           data={classes.map(([name, count]) => ({ value: name, label: `${name} (${count})` }))}
           value={driverClass}
-          onChange={filterChanged(setDriverClass)}
+          onChange={(value) => update({ class: value, page: null })}
           clearable
           w={240}
         />

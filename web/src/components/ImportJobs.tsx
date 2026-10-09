@@ -1,55 +1,38 @@
-import { Alert, Badge, Button, Card, Drawer, Group, List, Loader, Stack, Text } from '@mantine/core'
+import { Alert, Badge, Button, Card, Drawer, Group, List, Loader, Progress, Stack, Text } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import { IconAlertTriangle } from '@tabler/icons-react'
-import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
-import { useJobs } from '../api/queries'
-import type { BootImageDriversResult, DriverImportResult, ImportJob, ImportKind, JobStatus } from '../api/types'
+import { useState } from 'react'
+import { useCancelJob, useJobs, useRetryJob } from '../api/queries'
+import type { BootImageDriversResult, DriverImportResult, ImportJob, ImportKind } from '../api/types'
 import { formatAgo, formatDateTime, formatDuration } from '../lib/format'
+import { isActive, jobStatusLabel } from '../lib/jobs'
 import { useNow } from '../lib/useNow'
 import { CopyCode } from './Copy'
 
-const statusBadges: Record<JobStatus, { label: string; color: string }> = {
-  queued: { label: 'Queued', color: 'gray' },
-  running: { label: 'Importing', color: 'blue' },
-  succeeded: { label: 'Imported', color: 'green' },
-  failed: { label: 'Failed', color: 'red' },
-}
-
-/** What each kind of import changes, to refresh once one finishes. */
-const refreshes: Record<ImportKind, string> = { boot: 'boot-images', install: 'install-images', drivers: 'drivers', 'boot-drivers': 'boot-images' }
-
-/** Imports of the given kinds, newest first, refreshing what they change as each one finishes. */
+/**
+ * Jobs of the given kinds, newest first: queued ones can be cancelled, and failed or cancelled ones tried again.
+ * The JobWatcher refreshes what a job changes once it finishes.
+ */
 export function ImportJobs({ kind }: { kind: ImportKind | ImportKind[] }) {
   const kinds: ImportKind[] = Array.isArray(kind) ? kind : [kind]
   const jobs = useJobs()
-  const queryClient = useQueryClient()
   const now = useNow()
   const [openId, setOpenId] = useState<string | null>(null)
-  const seenFinished = useRef(new Set<string>())
 
   const mine = (jobs.data ?? []).filter((job) => kinds.includes(job.request.kind))
 
-  useEffect(() => {
-    for (const job of mine) {
-      if ((job.status === 'succeeded' || job.status === 'failed') && !seenFinished.current.has(job.id)) {
-        seenFinished.current.add(job.id)
-        void queryClient.invalidateQueries({ queryKey: [refreshes[job.request.kind]] })
-        void queryClient.invalidateQueries({ queryKey: ['server-config'] })
-      }
-    }
-  }, [mine, queryClient])
-
   // Recent ones only: running or queued, plus anything that finished in the last day.
   const visible = mine
-    .filter((job) => job.status === 'queued' || job.status === 'running' || now - new Date(job.finishedAt ?? job.createdAt).getTime() < 86_400_000)
+    .filter((job) => isActive(job) || now - new Date(job.finishedAt ?? job.createdAt).getTime() < 86_400_000)
     .slice(0, 5)
   if (visible.length === 0) return null
   const open = mine.find((job) => job.id === openId) ?? null
+  const imagesOnly = kinds.every((k) => k === 'boot' || k === 'install')
 
   return (
     <Card withBorder mb="lg" padding="sm">
       <Text fw={600} size="sm" mb="xs">
-        Imports
+        {imagesOnly ? 'Imports' : 'Jobs'}
       </Text>
       <Stack gap="xs">
         {visible.map((job) => (
@@ -64,8 +47,12 @@ export function ImportJobs({ kind }: { kind: ImportKind | ImportKind[] }) {
 }
 
 function JobRow({ job, now, onOpen }: { job: ImportJob; now: number; onOpen: () => void }) {
-  const badge = statusBadges[job.status]
-  const active = job.status === 'queued' || job.status === 'running'
+  const badge = jobStatusLabel(job)
+  const active = isActive(job)
+  const cancel = useCancelJob()
+  const retry = useRetryJob()
+  const failed = (title: string, error: unknown) =>
+    notifications.show({ color: 'red', title, message: error instanceof Error ? error.message : String(error) })
   const took = job.startedAt
     ? ((job.finishedAt ? new Date(job.finishedAt).getTime() : now) - new Date(job.startedAt).getTime()) / 1000
     : null
@@ -85,16 +72,41 @@ function JobRow({ job, now, onOpen }: { job: ImportJob; now: number; onOpen: () 
           </Group>
           <Text size="xs" c={job.status === 'failed' ? 'red' : 'dimmed'} lineClamp={2}>
             {job.status === 'failed' ? job.error : job.stage}
-            {job.percent != null && active ? ` (${job.percent}%)` : ''}
           </Text>
+          {job.percent != null && job.status === 'running' && (
+            <Progress value={job.percent} size="sm" mt={4} mb={2} w={260} maw="100%" aria-label={`${job.percent}% done`} />
+          )}
           <Text size="xs" c="dimmed">
             {active ? (took != null ? `Running for ${formatDuration(took)}` : 'Waiting to start') : `${formatAgo(job.finishedAt)}${took != null ? ` · took ${formatDuration(took)}` : ''}`}
           </Text>
         </div>
       </Group>
-      <Button size="compact-xs" variant="subtle" onClick={onOpen}>
-        Log
-      </Button>
+      <Group gap={4} wrap="nowrap">
+        {job.status === 'queued' && (
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="red"
+            loading={cancel.isPending}
+            onClick={() => cancel.mutateAsync(job.id).catch((error) => failed(`Couldn't cancel ${job.request.name}`, error))}
+          >
+            Cancel
+          </Button>
+        )}
+        {(job.status === 'failed' || job.status === 'cancelled') && (
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            loading={retry.isPending}
+            onClick={() => retry.mutateAsync(job.id).catch((error) => failed(`Couldn't try ${job.request.name} again`, error))}
+          >
+            Try again
+          </Button>
+        )}
+        <Button size="compact-xs" variant="subtle" onClick={onOpen}>
+          Log
+        </Button>
+      </Group>
     </Group>
   )
 }

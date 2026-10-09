@@ -27,6 +27,15 @@ const tags: Record<number, string> = {
   17763: '1809', 17134: '1803', 16299: '1709', 15063: '1703', 14393: '1607', 10240: '1507',
 }
 
+/**
+ * Whether an image is Windows Setup from Windows 11 (or Windows Server 2025) media, build 22000 on. Its Setup
+ * shows a deprecation notice where the WDS client should be, so as a WDS boot image it boots but installs nothing.
+ */
+export function isBlockedSetup(image: { name: string; version: string | null }): boolean {
+  const build = Number(image.version?.split('.')[2])
+  return /\bWindows Setup\b/i.test(image.name) && build >= 22000
+}
+
 /** The feature update a build is, e.g. "10.0.26200.8328" → "25H2". */
 export function releaseTag(version: unknown): string | null {
   if (typeof version !== 'string') return null

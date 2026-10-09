@@ -5,6 +5,7 @@ import {
   Burger,
   Button,
   Group,
+  Loader,
   Menu,
   NavLink,
   Text,
@@ -29,8 +30,10 @@ import {
   IconUser,
 } from '@tabler/icons-react'
 import { Outlet, NavLink as RouterNavLink, useLocation } from 'react-router'
-import { useConnection, useConsoleInfo, useSignOut, useTarget } from '../api/queries'
+import { useConnection, useConsoleInfo, useJobs, useSignOut, useTarget } from '../api/queries'
 import type { SessionInfo } from '../api/types'
+import { isActive, jobPages } from '../lib/jobs'
+import { JobWatcher } from './JobWatcher'
 
 const links = [
   { to: '/', label: 'Dashboard', icon: IconLayoutDashboard },
@@ -46,6 +49,9 @@ const links = [
 export function AppLayout({ session }: { session: SessionInfo }) {
   const [opened, { toggle, close }] = useDisclosure()
   const { pathname } = useLocation()
+  // Pages with an import or driver job queued or running get a spinner in the menu.
+  const jobs = useJobs()
+  const busy = new Set((jobs.data ?? []).filter(isActive).map((job) => jobPages[job.request.kind].path))
 
   return (
     <AppShell
@@ -78,6 +84,7 @@ export function AppLayout({ session }: { session: SessionInfo }) {
               to={to}
               label={label}
               leftSection={<Icon size={18} stroke={1.6} />}
+              rightSection={busy.has(to) ? <Loader size={14} aria-label="A job is running" /> : undefined}
               active={to === '/' ? pathname === '/' : pathname.startsWith(to)}
               onClick={close}
             />
@@ -91,6 +98,7 @@ export function AppLayout({ session }: { session: SessionInfo }) {
       <AppShell.Main>
         <Outlet />
       </AppShell.Main>
+      <JobWatcher />
     </AppShell>
   )
 }

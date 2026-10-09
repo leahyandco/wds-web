@@ -90,11 +90,11 @@ public static class DemoWds
 
     private static object[] BootImages(DateTimeOffset now) =>
     [
-        BootImage("Windows 11 Setup (x64)", "Windows 11 25H2 Setup", "X64", "boot-win11-x64.wim", "10.0.26100.6584", 3_310_436_352, true, 100, now.AddDays(-21)),
-        BootImage("Windows Server 2025 Setup (x64)", "Windows Server 2025 Setup", "X64", "boot-ws2025-x64.wim", "10.0.26100.1742", 3_228_901_376, true, 200, now.AddDays(-48)),
-        BootImage("WinPE Tools (x64)", "Diagnostics, disk and imaging tools", "X64", "winpe-tools-x64.wim", "10.0.26100.1", 1_486_635_008, true, 300, now.AddDays(-63)),
-        BootImage("Windows 11 Setup (ARM64)", "Windows 11 25H2 Setup for ARM64", "Arm64", "boot-win11-arm64.wim", "10.0.26100.6584", 3_402_092_544, true, 400, now.AddDays(-21)),
-        BootImage("Windows 10 Setup (x64)", "Kept for older hardware", "X64", "boot-win10-x64.wim", "10.0.19041.5965", 2_617_245_696, false, 500, now.AddDays(-310)),
+        BootImage("Windows Setup (x64)", "Windows 10 22H2 Setup, which installs Windows 10 and 11", "X64", "boot-setup-x64.wim", "10.0.19041.6036", 2_617_245_696, true, 100, now.AddDays(-21)),
+        BootImage("WinPE Tools (x64)", "Diagnostics, disk and imaging tools", "X64", "winpe-tools-x64.wim", "10.0.26100.1", 1_486_635_008, true, 200, now.AddDays(-63)),
+        BootImage("Windows Setup (ARM64)", "Windows 10 22H2 Setup for ARM64", "Arm64", "boot-setup-arm64.wim", "10.0.19041.6036", 2_804_103_168, true, 300, now.AddDays(-21)),
+        // Windows 11's own Setup shows a deprecation notice in place of the WDS client.
+        BootImage("Windows 11 Setup (x64)", "Windows 11's own Setup, which won't run the WDS client", "X64", "boot-win11-x64.wim", "10.0.26100.6584", 3_310_436_352, false, 400, now.AddDays(-40)),
     ];
 
     private static Dictionary<string, object?> BootImage(
@@ -193,6 +193,7 @@ public static class DemoWds
     private static object[] ImageFiles(DateTimeOffset now) =>
     [
         new { path = @"C:\ISO\Win11_25H2_English_x64.iso", size = 7_867_854_848L, modified = Iso(now.AddDays(-22)) },
+        new { path = @"C:\ISO\Win10_22H2_English_x64.iso", size = 6_140_975_104L, modified = Iso(now.AddDays(-400)) },
         new { path = @"C:\ISO\Windows_Server_2025_x64.iso", size = 5_510_529_024L, modified = Iso(now.AddDays(-49)) },
         new { path = @"C:\Images\winpe-tools-x64.wim", size = 512_458_752L, modified = Iso(now.AddDays(-64)) },
     ];
@@ -207,10 +208,15 @@ public static class DemoWds
     private static object ImageFileInfo(string path)
     {
         var server = path.Contains("Server", StringComparison.OrdinalIgnoreCase);
-        var version = server ? "10.0.26100.1742" : "10.0.26200.6584";
+        var windows10 = path.Contains("Win10", StringComparison.OrdinalIgnoreCase);
+        var version = server ? "10.0.26100.1742" : windows10 ? "10.0.19045.6036" : "10.0.26200.6584";
+        // Windows 10's boot.wim reports the build it shares with 20H2 to 22H2.
+        var bootVersion = windows10 ? "10.0.19041.6036" : version;
         var editions = server
             ? new[] { ("Windows Server 2025 Standard", "ServerStandardCore"), ("Windows Server 2025 Standard (Desktop Experience)", "ServerStandard"), ("Windows Server 2025 Datacenter", "ServerDatacenterCore"), ("Windows Server 2025 Datacenter (Desktop Experience)", "ServerDatacenter") }
-            : new[] { ("Windows 11 Home", "Core"), ("Windows 11 Education", "Education"), ("Windows 11 Pro", "Professional"), ("Windows 11 Enterprise", "Enterprise") };
+            : windows10
+                ? new[] { ("Windows 10 Home", "Core"), ("Windows 10 Education", "Education"), ("Windows 10 Pro", "Professional"), ("Windows 10 Enterprise", "Enterprise") }
+                : new[] { ("Windows 11 Home", "Core"), ("Windows 11 Education", "Education"), ("Windows 11 Pro", "Professional"), ("Windows 11 Enterprise", "Enterprise") };
         return new
         {
             path,
@@ -226,8 +232,8 @@ public static class DemoWds
                     innerPath = @"sources\boot.wim", role = "boot", format = "wim", size = 698_735_697L,
                     images = new[]
                     {
-                        ImageEntry(1, "Microsoft Windows PE (x64)", 2_932_409_163, version, "WindowsPE", "WindowsPE", false),
-                        ImageEntry(2, "Microsoft Windows Setup (x64)", 2_986_906_685, version, "WindowsPE", "WindowsPE", true),
+                        ImageEntry(1, "Microsoft Windows PE (x64)", 2_932_409_163, bootVersion, "WindowsPE", "WindowsPE", false),
+                        ImageEntry(2, "Microsoft Windows Setup (x64)", 2_986_906_685, bootVersion, "WindowsPE", "WindowsPE", true),
                     },
                 },
                 new
@@ -251,12 +257,12 @@ public static class DemoWds
     {
         prestaged = new object[]
         {
-            Device("LAB-PC-01", "00-00-5E-00-53-11", "Lab", "NoPrompt", @"Boot\x64\Images\boot-win11-x64.wim", @"WdsClientUnattend\lab-x64.xml"),
-            Device("LAB-PC-02", "00-00-5E-00-53-12", "Lab", "NoPrompt", @"Boot\x64\Images\boot-win11-x64.wim", @"WdsClientUnattend\lab-x64.xml"),
-            Device("LAB-PC-03", "00-00-5E-00-53-13", "Lab", "NoPrompt", @"Boot\x64\Images\boot-win11-x64.wim", @"WdsClientUnattend\lab-x64.xml"),
+            Device("LAB-PC-01", "00-00-5E-00-53-11", "Lab", "NoPrompt", @"Boot\x64\Images\boot-setup-x64.wim", @"WdsClientUnattend\lab-x64.xml"),
+            Device("LAB-PC-02", "00-00-5E-00-53-12", "Lab", "NoPrompt", @"Boot\x64\Images\boot-setup-x64.wim", @"WdsClientUnattend\lab-x64.xml"),
+            Device("LAB-PC-03", "00-00-5E-00-53-13", "Lab", "NoPrompt", @"Boot\x64\Images\boot-setup-x64.wim", @"WdsClientUnattend\lab-x64.xml"),
             Device("KIOSK-01", "{E8A3EFAC-201F-4E69-953E-B2DAA1E8B1B6}", "Kiosks", 0, null, null),
             Device("TRAINING-01", "00-00-5E-00-53-21", "Training rooms", "OptIn", null, @"WdsClientUnattend\training.xml"),
-            Device("SRV-BUILD-01", "00-00-5E-00-53-31", "Servers", "OptOut", @"Boot\x64\Images\boot-ws2025-x64.wim", null),
+            Device("SRV-BUILD-01", "00-00-5E-00-53-31", "Servers", "OptOut", @"Boot\x64\Images\winpe-tools-x64.wim", null),
             // The sample boots that WDS answered as prestaged (see BootEvents).
             Device("OFFICE-PC-09", "00-00-5E-00-53-37", "Office", 0, null, null),
             Device("OFFICE-PC-14", "00-00-5E-00-53-41", "Office", 0, null, null),
@@ -266,7 +272,7 @@ public static class DemoWds
         autoAdd = new object[]
         {
             new Dictionary<string, object?> { ["RequestId"] = 21, ["Status"] = "Pending", ["DeviceName"] = null, ["DeviceID"] = "{0B6F1E2A-4C1D-4E3B-9A57-1F2E3D4C5B6A}", ["Architecture"] = "X64", ["BootImagePath"] = null },
-            new Dictionary<string, object?> { ["RequestId"] = 20, ["Status"] = "Approved", ["DeviceName"] = "LAB-PC-07", ["DeviceID"] = "00-00-5E-00-53-17", ["Architecture"] = "X64", ["BootImagePath"] = @"Boot\x64\Images\boot-win11-x64.wim" },
+            new Dictionary<string, object?> { ["RequestId"] = 20, ["Status"] = "Approved", ["DeviceName"] = "LAB-PC-07", ["DeviceID"] = "00-00-5E-00-53-17", ["Architecture"] = "X64", ["BootImagePath"] = @"Boot\x64\Images\boot-setup-x64.wim" },
             new Dictionary<string, object?> { ["RequestId"] = 19, ["Status"] = "Denied", ["DeviceName"] = null, ["DeviceID"] = "00-00-5E-00-53-90", ["Architecture"] = "X86", ["BootImagePath"] = null },
         },
         pendingPolicyEnabled = true,
@@ -473,10 +479,10 @@ public static class DemoWds
         Download(events, ref t, ip, @"\Boot\Boot.SDI", 3_170_304, 1);
         if (stopAt == BootStop.Downloading)
         {
-            events.Add(new DemoEvent(t, BootActivity.TftpStarted, new() { ["ClientIP"] = ip, ["FileName"] = @"\Boot\x64\Images\boot-win11-x64.wim", ["FileSize"] = "662345234" }));
+            events.Add(new DemoEvent(t, BootActivity.TftpStarted, new() { ["ClientIP"] = ip, ["FileName"] = @"\Boot\x64\Images\boot-setup-x64.wim", ["FileSize"] = "662345234" }));
             return new BootedClient(ip, mac, deviceId, t);
         }
-        Download(events, ref t, ip, @"\Boot\x64\Images\boot-win11-x64.wim", 662_345_234, 14);
+        Download(events, ref t, ip, @"\Boot\x64\Images\boot-setup-x64.wim", 662_345_234, 14);
         return new BootedClient(ip, mac, deviceId, t);
     }
 
@@ -506,7 +512,7 @@ public static class DemoWds
         }
         void Add(DateTimeOffset time, int id, params (string, string)[] extra) => events.Add(new DemoEvent(time, id, Fields(extra)));
 
-        Add(start, DeploymentEvents.ClientStarted, ("ClientVersion", "10.0.26100.6584"), ("WinPEVersion", "10.0.26100.6584"));
+        Add(start, DeploymentEvents.ClientStarted, ("ClientVersion", "10.0.19041.1"), ("WinPEVersion", "10.0.19041.6036"));
         // Setup asks for the WDS client unattend file as it starts, and WDS refuses, whether there's one or not.
         events.Add(new DemoEvent(start.AddMilliseconds(7), BootActivity.UnattendBlocked, new() { ["ClientIP"] = client.Ip }, "Application", "WDSIMGSRV"));
         var t = start.AddMinutes(1);
@@ -556,7 +562,7 @@ public static class DemoWds
             .Where(x => x.Event.Id is BootActivity.PxeBoot or BootActivity.TftpCompleted or BootActivity.UnattendBlocked || DeploymentEvents.IsDeploymentEvent(x.Event.Id))
             .Select(x => Event(x.Event.Time, x.Event.Id, x.Event.Log, x.Event.Provider, x.Event.Data, x.RecordId))
             .Append(Event(now.AddHours(-30), 4101, "Operational", "Microsoft-Windows-Deployment-Services-Diagnostics",
-                new() { ["ClientIP"] = "192.0.2.88", ["FileName"] = @"\Boot\x64\Images\boot-win10-x64.wim", ["ErrorCode"] = "1460" }, FirstBootRecord - 2))
+                new() { ["ClientIP"] = "192.0.2.88", ["FileName"] = @"\Boot\x64\Images\boot-setup-x64.wim", ["ErrorCode"] = "1460" }, FirstBootRecord - 2))
             .Append(Event(now.AddDays(-9).AddHours(-3).AddMinutes(2), 256, "Application", "WDSServer", new(), FirstBootRecord - 1))
             .Where(e => e.Time >= since && (!problemsOnly || e.Level is >= 1 and <= 3))
             .OrderByDescending(e => e.Time)

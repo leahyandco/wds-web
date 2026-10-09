@@ -7,7 +7,7 @@ namespace WdsWeb.Api.Wds;
 
 public enum ImageKind { Boot, Install }
 
-public enum JobStatus { Queued, Running, Succeeded, Failed }
+public enum JobStatus { Queued, Running, Succeeded, Failed, Cancelled }
 
 /// <summary>Something the queue imports: an image, or drivers.</summary>
 public interface IImportRequest
@@ -124,6 +124,34 @@ public sealed class ImportQueue(
 
     public ImportJobView? Get(string id) => _jobs.TryGetValue(id, out var job) ? job.View() : null;
 
+    /// <summary>
+    /// Takes a job off the queue before it starts. One already running isn't stopped: WDS would be left
+    /// halfway through changing an image or the driver store.
+    /// </summary>
+    /// <returns>The job as it is now; null if there's none with that ID.</returns>
+    public ImportJobView? Cancel(string id, string? cancelledBy)
+    {
+        if (!_jobs.TryGetValue(id, out var job)) return null;
+        if (!job.TryCancel(cancelledBy)) throw new InvalidRequestException("Only an import that hasn't started yet can be cancelled.");
+        logger.LogInformation("Cancelled the import of {Name} for {User}", job.Request.Name, cancelledBy);
+        return job.View();
+    }
+
+    /// <summary>Queues a failed or cancelled job's import again, as a new job asked for by <paramref name="requestedBy"/>.</summary>
+    /// <returns>The new job; null if there's no job with that ID.</returns>
+    public ImportJobView? Retry(string id, string? requestedBy)
+    {
+        if (!_jobs.TryGetValue(id, out var job)) return null;
+        if (!job.CanRetry) throw new InvalidRequestException("Only an import that failed or was cancelled can be tried again.");
+        return Enqueue(job.Request switch
+        {
+            ImportRequest image => image with { RequestedBy = requestedBy },
+            DriverImportRequest drivers => drivers with { RequestedBy = requestedBy },
+            BootImageDriversRequest boot => boot with { RequestedBy = requestedBy },
+            var other => other,
+        });
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await foreach (var job in _pending.Reader.ReadAllAsync(stoppingToken))
@@ -133,7 +161,8 @@ public sealed class ImportQueue(
     private async Task RunAsync(Job job, CancellationToken ct)
     {
         var request = job.Request;
-        job.Start();
+        // Cancelled while it waited.
+        if (!job.TryStart()) return;
         if (request.RequestedBy is not null) job.Message($"Requested by {request.RequestedBy}");
         var tempFolder = staging.ToServerPath(Path.Combine(staging.TempFolder, job.Id));
         try
@@ -229,15 +258,34 @@ public sealed class ImportQueue(
         public string Id { get; } = id;
         public IImportRequest Request { get; } = request;
         public DateTimeOffset CreatedAt { get; } = DateTimeOffset.UtcNow;
-        public bool IsFinished { get { lock (_lock) return _status is JobStatus.Succeeded or JobStatus.Failed; } }
+        public bool IsFinished { get { lock (_lock) return _status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled; } }
 
-        public void Start()
+        public bool CanRetry { get { lock (_lock) return _status is JobStatus.Failed or JobStatus.Cancelled; } }
+
+        /// <returns>False if the job was cancelled before its turn came.</returns>
+        public bool TryStart()
         {
             lock (_lock)
             {
+                if (_status != JobStatus.Queued) return false;
                 _status = JobStatus.Running;
                 _stage = "Starting";
                 _startedAt = DateTimeOffset.UtcNow;
+                return true;
+            }
+        }
+
+        /// <returns>False if the job has started (or finished) already.</returns>
+        public bool TryCancel(string? cancelledBy)
+        {
+            lock (_lock)
+            {
+                if (_status != JobStatus.Queued) return false;
+                _status = JobStatus.Cancelled;
+                _stage = "Cancelled";
+                _log.Add(new JobLogLine(DateTimeOffset.UtcNow, cancelledBy is null ? "Cancelled before it started" : $"Cancelled by {cancelledBy} before it started"));
+                _finishedAt = DateTimeOffset.UtcNow;
+                return true;
             }
         }
 

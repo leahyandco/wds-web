@@ -51,6 +51,11 @@ public static class ImageEndpoints
         api.MapGet("/jobs", (ImportQueue queue) => queue.List());
         api.MapGet("/jobs/{id}", (string id, ImportQueue queue) =>
             queue.Get(id) is { } job ? Results.Ok(job) : Results.NotFound());
+        // A queued import can be cancelled before it starts, and one that failed or was cancelled tried again.
+        api.MapDelete("/jobs/{id}", (string id, HttpContext http, ImportQueue queue) =>
+            queue.Cancel(id, http.User.Identity?.Name) is { } job ? Results.Ok(job) : Results.NotFound());
+        api.MapPost("/jobs/{id}/retry", (string id, HttpContext http, ImportQueue queue) =>
+            queue.Retry(id, http.User.Identity?.Name) is { } job ? Results.Accepted($"/api/jobs/{job.Id}", job) : Results.NotFound());
 
         // Enabling, disabling and removing images, and removing empty image groups.
         foreach (var action in new[] { "Enable", "Disable", "Remove" })
