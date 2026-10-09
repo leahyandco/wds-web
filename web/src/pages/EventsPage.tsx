@@ -1,5 +1,5 @@
 import { Alert, Badge, Button, Card, Drawer, Group, SegmentedControl, Stack, Switch, Table, Text, TextInput } from '@mantine/core'
-import { IconAlertTriangle, IconInfoCircle, IconSearch } from '@tabler/icons-react'
+import { IconAlertTriangle, IconDownload, IconInfoCircle, IconSearch } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useEvents } from '../api/queries'
 import type { WdsEvent } from '../api/types'
@@ -7,6 +7,7 @@ import { CopyCode } from '../components/Copy'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { eventKey, isProblem, levelColor, levelLabel, sourceLabel } from '../lib/events'
+import { csvTime, datedName, downloadCsv } from '../lib/csv'
 import { formatDateTimeSeconds, plural } from '../lib/format'
 import { useUrlParams } from '../lib/urlState'
 import { openOnKey } from '../lib/keys'
@@ -41,6 +42,21 @@ export function EventsPage() {
   if (found && found !== kept) setKept(found)
   const selected = found ?? (kept && eventKey(kept) === openKey ? kept : null)
 
+  const needle = search.trim().toLowerCase()
+  // The server filters problems too; this also covers the old list shown while a new one loads.
+  const visible = (query.data?.events ?? []).filter(
+    (event) =>
+      (!problemsOnly || isProblem(event)) &&
+      (!needle || `${event.message ?? ''} ${event.id} ${event.provider} ${event.log}`.toLowerCase().includes(needle)),
+  )
+
+  /** The events shown, as filtered, as a CSV file. */
+  const exportCsv = () =>
+    downloadCsv(datedName('wds-events'), [
+      ['Time', 'Level', 'ID', 'Source', 'Log', 'Message'],
+      ...visible.map((event) => [csvTime(event.time), levelLabel(event), event.id, event.provider, event.log, event.message]),
+    ])
+
   return (
     <>
       <PageHeader
@@ -48,6 +64,11 @@ export function EventsPage() {
         description="WDS diagnostics and service events. Refreshes every 30 seconds."
         onRefresh={() => void query.refetch()}
         refreshing={query.isFetching}
+        actions={
+          <Button variant="default" leftSection={<IconDownload size={16} />} onClick={exportCsv} disabled={visible.length === 0}>
+            Export CSV
+          </Button>
+        }
       />
 
       <Group mb="md" gap="sm">
@@ -80,13 +101,6 @@ export function EventsPage() {
 
       <QueryState query={query}>
         {({ events, total, routineHidden, warnings }) => {
-          const needle = search.trim().toLowerCase()
-          // The server filters problems too; this also covers the old list shown while a new one loads.
-          const visible = events.filter(
-            (event) =>
-              (!problemsOnly || isProblem(event)) &&
-              (!needle || `${event.message ?? ''} ${event.id} ${event.provider} ${event.log}`.toLowerCase().includes(needle)),
-          )
           const more = limits.find((limit) => limit > max)
           return (
             <Stack>

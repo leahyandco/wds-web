@@ -23,7 +23,7 @@ import {
   Tooltip,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconAlertTriangle, IconChevronDown, IconDots, IconPencil, IconPlus, IconSearch, IconTrash, IconUpload } from '@tabler/icons-react'
+import { IconAlertTriangle, IconChevronDown, IconDots, IconDownload, IconPencil, IconPlus, IconSearch, IconTrash, IconUpload } from '@tabler/icons-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import {
   useAddBootImageDrivers,
@@ -42,6 +42,7 @@ import { ImportJobs } from '../components/ImportJobs'
 import { PageHeader } from '../components/PageHeader'
 import { SortableTh } from '../components/SortableTh'
 import { QueryState } from '../components/QueryState'
+import { csvTime, datedName, downloadCsv } from '../lib/csv'
 import { describeFilter } from '../lib/drivers'
 import { showDone } from '../lib/notify'
 import { EMPTY, formatDate, formatDateTime, formatDay } from '../lib/format'
@@ -153,6 +154,26 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   const shown = sorted.slice((Math.min(page, pages) - 1) * PAGE_SIZE, Math.min(page, pages) * PAGE_SIZE)
   const onSort = (next: { key: string; descending: boolean }) => update({ ...sortToParams(next), page: null })
+
+  /** The packages listed (every page of them), as filtered and sorted, as a CSV file. */
+  const exportCsv = () =>
+    downloadCsv(datedName('driver-packages'), [
+      ['Name', 'Provider', 'Class', 'Architecture', 'Version', 'Driver date', 'Added', 'Groups', 'Enabled', 'Signed', 'INF file', 'Package ID'],
+      ...sorted.map((p) => [
+        p.name,
+        p.provider,
+        p.className,
+        p.architecture,
+        p.version,
+        p.date?.slice(0, 10),
+        csvTime(p.dateAdded),
+        p.groups.join('; '),
+        p.enabled ? 'Yes' : 'No',
+        p.signed ? 'Yes' : 'No',
+        p.infPath,
+        p.id,
+      ]),
+    ])
   // The packages chosen among those listed: the bar acts only on what the group, class and search show, and a
   // refresh may have removed some.
   const selection = matching.filter((p) => chosen.has(p.id))
@@ -275,6 +296,9 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
           clearable
           w={240}
         />
+        <Button variant="default" leftSection={<IconDownload size={16} />} onClick={exportCsv} disabled={sorted.length === 0}>
+          Export CSV
+        </Button>
       </Group>
 
       {selection.length > 0 && (

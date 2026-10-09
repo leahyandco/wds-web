@@ -1,5 +1,5 @@
 import { Alert, Anchor, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, TextInput, Timeline, Title } from '@mantine/core'
-import { IconAlertTriangle, IconDeviceDesktopPlus, IconInfoCircle, IconSearch } from '@tabler/icons-react'
+import { IconAlertTriangle, IconDeviceDesktopPlus, IconDownload, IconInfoCircle, IconSearch } from '@tabler/icons-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useActivity, useBootImages, useDevices, useServerConfig } from '../api/queries'
@@ -11,6 +11,7 @@ import { DeviceEditor } from '../components/DeviceEditor'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { architectureLabel, bootStatus, clientAddress, imageSeconds } from '../lib/boot'
+import { csvTime, datedName, downloadCsv } from '../lib/csv'
 import { deploymentStage } from '../lib/deployments'
 import { bootImageName, prestagedDevice } from '../lib/devices'
 import { EMPTY, formatAgo, formatBytes, formatDateTime, formatDateTimeSeconds } from '../lib/format'
@@ -93,6 +94,34 @@ export function ActivityPage() {
   const selected = found ?? (kept && kept.id === bootId ? kept : null)
   const selectedDevice = selected ? names.device(selected) : undefined
 
+  const needle = search.trim().toLowerCase()
+  const visible = (query.data?.sessions ?? []).filter((session) => !needle || matches(session, names, needle))
+
+  /** The boots shown, as filtered, as a CSV file. */
+  const exportCsv = () =>
+    downloadCsv(datedName('boot-activity'), [
+      ['Started', 'Last seen', 'Device', 'MAC address', 'IP address', 'Device ID', 'Architecture', 'Status', 'Boot image', 'Download seconds', 'Install', 'Install image', 'Signed in as', 'Error'],
+      ...visible.map((session) => {
+        const seconds = imageSeconds(session)
+        return [
+          csvTime(session.firstSeen),
+          csvTime(session.lastSeen),
+          names.device(session)?.DeviceName,
+          session.macAddress,
+          session.clientIp,
+          session.deviceId,
+          session.architecture,
+          bootStatus[session.status].label,
+          names.image(session),
+          seconds != null ? Math.round(seconds) : '',
+          session.deployment ? deploymentStage[session.deployment.stage].label : '',
+          session.deployment?.imageName,
+          session.deployment?.userName,
+          session.deployment?.error,
+        ]
+      }),
+    ])
+
   return (
     <>
       <PageHeader
@@ -100,6 +129,11 @@ export function ActivityPage() {
         description="PXE boots, boot image downloads and installs, from WDS's event logs. Refreshes every 10 seconds."
         onRefresh={() => void query.refetch()}
         refreshing={query.isFetching}
+        actions={
+          <Button variant="default" leftSection={<IconDownload size={16} />} onClick={exportCsv} disabled={visible.length === 0}>
+            Export CSV
+          </Button>
+        }
       />
       <Group mb="md" gap="sm">
         <SegmentedControl data={ranges} value={hours} onChange={(value) => update({ range: value === DEFAULT_RANGE ? null : value })} />
@@ -118,8 +152,6 @@ export function ActivityPage() {
 
       <QueryState query={query}>
         {(activity) => {
-          const needle = search.trim().toLowerCase()
-          const visible = needle ? activity.sessions.filter((session) => matches(session, names, needle)) : activity.sessions
           return (
             <Stack>
               {clientLogging !== null && !isYes(clientLogging) && (

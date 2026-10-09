@@ -1,16 +1,18 @@
-import { Alert, Anchor, Badge, Button, Card, Group, Stack, Tabs, Text } from '@mantine/core'
-import { IconAlertTriangle, IconInfoCircle, IconPlus } from '@tabler/icons-react'
+import { Alert, Anchor, Badge, Button, Card, CloseButton, Group, Stack, Tabs, Text, TextInput } from '@mantine/core'
+import { IconAlertTriangle, IconDownload, IconInfoCircle, IconListDetails, IconPlus, IconSearch } from '@tabler/icons-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useBootImages, useDevices } from '../api/queries'
 import type { WdsRecord } from '../api/types'
 import { CopyValue } from '../components/Copy'
 import { DeviceEditor } from '../components/DeviceEditor'
-import { ClearRequestsButton, DeviceActionsMenu, RequestActionsMenu } from '../components/DeviceMenus'
+import { ClearRequestsButton, DeviceActionsMenu, RequestActionsMenu, RequestBulkActions } from '../components/DeviceMenus'
+import { ImportDevicesDialog } from '../components/ImportDevicesDialog'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { RecordTable, type RecordColumn } from '../components/RecordTable'
 import { approvedRequestFor, bootImageName, devicePrompt } from '../lib/devices'
+import { datedName, downloadCsv } from '../lib/csv'
 import { formatValue } from '../lib/format'
 import { asString, pick } from '../lib/records'
 import { useUrlParams } from '../lib/urlState'
@@ -25,6 +27,9 @@ export function DevicesPage() {
   const bootImages = useBootImages()
   // undefined: closed; null: prestaging a new device; a record: changing that device.
   const [editing, setEditing] = useState<WdsRecord | null | undefined>(undefined)
+  const [importing, setImporting] = useState(false)
+  // Requests chosen for approving or rejecting together, by request ID.
+  const [chosen, setChosen] = useState<Set<string>>(new Set())
   // The tab is in the address, so the dashboard can open the requests. Without one, the page opens on the
   // requests if any are waiting when it loads; later arrivals don't switch tabs under you.
   const [params, update] = useUrlParams()
@@ -32,10 +37,23 @@ export function DevicesPage() {
   const pending = query.data?.autoAdd.filter((request) => request.Status === 'Pending').length ?? 0
   if (firstTab === null && query.data) setFirstTab(pending > 0 ? 'requests' : 'prestaged')
   const tab = params.get('tab') ?? firstTab ?? 'prestaged'
+  // The search is in the address too; the box keeps its own text, as the address updates a moment later.
+  const [search, setSearch] = useState(() => params.get('q') ?? '')
+  const needle = search.trim().toLowerCase()
 
   const bootImage = (row: WdsRecord) => {
     const path = asString(row.BootImagePath)
     return path ? bootImageName(bootImages.data ?? [], path) : formatValue(row.BootImagePath)
+  }
+  /** Whether a device or request matches the search, by what its row shows; IDs match whatever their separators. */
+  const matches = (row: WdsRecord) => {
+    if (!needle) return true
+    const texts = [row.DeviceName, row.DeviceID, row.Group, row.WdsClientUnattend, row.RequestId, row.Status, row.Architecture, bootImage(row)]
+    const digits = needle.replace(/[-:{}. ]/g, '')
+    return (
+      texts.some((value) => value != null && String(value).toLowerCase().includes(needle)) ||
+      (/^[0-9a-f]{4,}$/.test(digits) && String(row.DeviceID ?? '').replace(/[^0-9a-f]/gi, '').toLowerCase().includes(digits))
+    )
   }
 
   // Property names are those of the WDS module's MSFT_WdsClient class.
@@ -53,7 +71,7 @@ export function DevicesPage() {
           </Text>
         ),
     },
-    { key: 'BootImagePath', label: 'Boot image', render: bootImage },
+    { key: 'BootImagePath', label: 'Boot image', render: bootImage, sortValue: bootImage },
     { key: 'WdsClientUnattend', label: 'Client unattend' },
     {
       key: 'actions',
@@ -83,9 +101,40 @@ export function DevicesPage() {
         </Badge>
       ),
     },
-    { key: 'BootImagePath', label: 'Boot image', render: bootImage },
+    { key: 'BootImagePath', label: 'Boot image', render: bootImage, sortValue: bootImage },
     { key: 'actions', label: '', render: (row) => <RequestActionsMenu request={row} /> },
   ]
+
+  const waiting = (query.data?.autoAdd ?? []).filter((request) => request.Status === 'Pending' && chosen.has(String(request.RequestId)))
+
+  /** The list on the open tab, as filtered, as a CSV file. */
+  const exportCsv = () => {
+    if (!query.data) return
+    if (tab === 'requests') {
+      downloadCsv(datedName('device-requests'), [
+        ['Request', 'Name', 'Device ID', 'Architecture', 'Status', 'Boot image'],
+        ...query.data.autoAdd
+          .filter(matches)
+          .map((row) => [row.RequestId, row.DeviceName, row.DeviceID, row.Architecture, row.Status === 'Denied' ? 'Rejected' : row.Status, bootImage(row)]),
+      ])
+    } else {
+      downloadCsv(datedName('devices'), [
+        ['Name', 'Device ID', 'Group', 'PXE prompt', 'Boot image', 'Boot image path', 'WDS client unattend', 'Join domain'],
+        ...query.data.prestaged
+          .filter(matches)
+          .map((row) => [
+            row.DeviceName,
+            row.DeviceID,
+            row.Group,
+            devicePrompt(row) || "Server's",
+            asString(row.BootImagePath) ? bootImage(row) : '',
+            row.BootImagePath,
+            row.WdsClientUnattend,
+            row.JoinDomain === false ? 'No' : 'Yes',
+          ]),
+      ])
+    }
+  }
 
   return (
     <>
@@ -95,10 +144,29 @@ export function DevicesPage() {
         onRefresh={() => void query.refetch()}
         refreshing={query.isFetching}
         actions={
-          <Button leftSection={<IconPlus size={16} />} onClick={() => setEditing(null)}>
-            Prestage device
-          </Button>
+          <>
+            <Button variant="default" leftSection={<IconDownload size={16} />} onClick={() => exportCsv()} disabled={!query.data}>
+              Export CSV
+            </Button>
+            <Button variant="default" leftSection={<IconListDetails size={16} />} onClick={() => setImporting(true)}>
+              Prestage from a list
+            </Button>
+            <Button leftSection={<IconPlus size={16} />} onClick={() => setEditing(null)}>
+              Prestage device
+            </Button>
+          </>
         }
+      />
+      <TextInput
+        placeholder="Search names, MAC addresses, GUIDs, groups and boot images"
+        aria-label="Search devices"
+        leftSection={<IconSearch size={16} />}
+        value={search}
+        onChange={(event) => {
+          setSearch(event.currentTarget.value)
+          update({ q: event.currentTarget.value })
+        }}
+        mb="md"
       />
       <QueryState query={query}>
         {(devices) => (
@@ -127,10 +195,14 @@ export function DevicesPage() {
               <Tabs.Panel value="prestaged" pt="md">
                 <Card withBorder p={0}>
                   <RecordTable
-                    rows={devices.prestaged}
+                    rows={devices.prestaged.filter(matches)}
                     rowKey={(row) => String(row.DeviceName)}
                     columns={prestagedColumns}
-                    empty="No prestaged devices. Prestage one here, or from a PXE boot on the Boot activity page."
+                    empty={
+                      needle && devices.prestaged.length > 0
+                        ? 'No prestaged devices match.'
+                        : 'No prestaged devices. Prestage one here, or from a PXE boot on the Boot activity page.'
+                    }
                     detailTitle={(row) => String(pick(row, 'DeviceName', 'DeviceID') ?? 'Device')}
                   />
                 </Card>
@@ -138,15 +210,33 @@ export function DevicesPage() {
               <Tabs.Panel value="requests" pt="md">
                 {devices.pendingPolicyEnabled ? (
                   <Stack>
-                    {devices.autoAdd.some((request) => request.Status === 'Approved' || request.Status === 'Denied') && (
-                      <Group justify="flex-end">
+                    {(waiting.length > 0 || devices.autoAdd.some((request) => request.Status === 'Approved' || request.Status === 'Denied')) && (
+                      <Group justify="space-between">
+                        <Group gap="xs">
+                          {waiting.length > 0 && (
+                            <>
+                              <Text size="sm" fw={500}>
+                                {waiting.length} chosen
+                              </Text>
+                              <RequestBulkActions requests={waiting} onDone={() => setChosen(new Set())} />
+                              <CloseButton size="sm" onClick={() => setChosen(new Set())} aria-label="Clear the choice" />
+                            </>
+                          )}
+                        </Group>
                         <ClearRequestsButton requests={devices.autoAdd} />
                       </Group>
                     )}
                     <Card withBorder p={0}>
                       <RecordTable
-                        rows={devices.autoAdd}
+                        rows={devices.autoAdd.filter(matches)}
                         rowKey={(row) => String(row.RequestId)}
+                        selection={{
+                          chosen,
+                          onChange: setChosen,
+                          // Only requests still waiting can be answered.
+                          choosable: (row) => row.Status === 'Pending',
+                          label: (row) => asString(row.DeviceName) || String(row.DeviceID ?? `request ${String(row.RequestId)}`),
+                        }}
                         columns={requestColumns}
                         empty="No requests. Unknown clients that PXE boot wait here for approval; this list refreshes every 10 seconds."
                         detailTitle={(row) => String(pick(row, 'DeviceName', 'DeviceID') ?? 'Request')}
@@ -169,6 +259,7 @@ export function DevicesPage() {
         )}
       </QueryState>
       <DeviceEditor opened={editing !== undefined} device={editing ?? null} onClose={() => setEditing(undefined)} />
+      <ImportDevicesDialog opened={importing} onClose={() => setImporting(false)} />
     </>
   )
 }

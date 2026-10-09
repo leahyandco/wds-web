@@ -110,8 +110,7 @@ export function RequestActionsMenu({ request }: { request: WdsRecord }) {
   const [dialog, setDialog] = useState<'approve' | 'reject' | null>(null)
   const requestId = asNumber(request.RequestId)
   if (requestId === null || request.Status !== 'Pending') return null
-  // WDS reports an unnamed request's name as an empty string.
-  const label = asString(request.DeviceName) || asString(request.DeviceID) || `request ${requestId}`
+  const label = requestLabel(request)
 
   const reject = async () => {
     try {
@@ -137,7 +136,7 @@ export function RequestActionsMenu({ request }: { request: WdsRecord }) {
             size="lg"
             closeOnClickOutside={false}
           >
-            {dialog === 'approve' && <ApproveForm requestId={requestId} label={label} onDone={() => setDialog(null)} />}
+            {dialog === 'approve' && <ApproveForm requestIds={[requestId]} label={label} onDone={() => setDialog(null)} />}
           </Modal>
           <Modal opened={dialog === 'reject'} onClose={() => setDialog(null)} title={`Reject ${label}?`} centered>
             <Text size="sm">
@@ -166,8 +165,12 @@ export function RequestActionsMenu({ request }: { request: WdsRecord }) {
   )
 }
 
-function ApproveForm({ requestId, label, onDone }: { requestId: number; label: string; onDone: () => void }) {
+/** Approves one request, which can be given a name, or several at once with the same settings. */
+function ApproveForm({ requestIds, label, onDone }: { requestIds: number[]; label: string; onDone: () => void }) {
   const answer = useAnswerDeviceRequest()
+  const one = requestIds.length === 1
+  const [done, setDone] = useState<number | null>(null)
+  const [failures, setFailures] = useState<string[]>([])
   const bootImages = useBootImages()
   const config = useServerConfig()
   const [name, setName] = useState('')
@@ -188,32 +191,54 @@ function ApproveForm({ requestId, label, onDone }: { requestId: number; label: s
   const nameProblem = name.trim() && !isDeviceName(name) ? 'Use letters, digits, hyphens and underscores, without spaces.' : null
 
   const approve = async () => {
-    try {
-      await answer.mutateAsync({
-        requestId,
-        approval: { name: name.trim() || null, bootImagePath: bootImage || null, wdsClientUnattend: unattend.trim() || null, joinDomain: join },
-      })
-      notifications.show({ color: 'green', message: `Approved ${label}. It carries on booting at its next check.` })
-      onDone()
-    } catch {
-      // Shown from the mutation's error.
+    const failed: string[] = []
+    setFailures([])
+    for (const [index, requestId] of requestIds.entries()) {
+      setDone(index)
+      try {
+        await answer.mutateAsync({
+          requestId,
+          approval: {
+            name: one ? name.trim() || null : null,
+            bootImagePath: bootImage || null,
+            wdsClientUnattend: unattend.trim() || null,
+            joinDomain: join,
+          },
+        })
+      } catch (error) {
+        failed.push(`${one ? label : `Request ${requestId}`}: ${error instanceof Error ? error.message : String(error)}`)
+      }
     }
+    setDone(null)
+    const approved = requestIds.length - failed.length
+    if (approved > 0) {
+      notifications.show({
+        color: 'green',
+        message: one ? `Approved ${label}. It carries on booting at its next check.` : `Approved ${approved} devices. They carry on booting at their next check.`,
+      })
+    }
+    if (failed.length === 0) onDone()
+    else setFailures(failed)
   }
 
   return (
     <DialogForm onSubmit={() => void approve()} canSubmit={!nameProblem}>
       <Text size="sm" c="dimmed">
-        The client is waiting at its PXE screen and carries on booting the next time it checks. Anything left empty follows the
-        server's settings.
+        {one
+          ? 'The client is waiting at its PXE screen and carries on booting the next time it checks.'
+          : `These ${requestIds.length} clients are waiting at their PXE screens and carry on booting the next time they check. WDS names each one.`}{' '}
+        Anything left empty follows the server's settings.
       </Text>
-      <TextInput
-        label="Name"
-        value={name}
-        onChange={(e) => setName(e.currentTarget.value)}
-        error={nameProblem}
-        description="Leave empty to let WDS name it."
-        data-autofocus
-      />
+      {one && (
+        <TextInput
+          label="Name"
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+          error={nameProblem}
+          description="Leave empty to let WDS name it."
+          data-autofocus
+        />
+      )}
       <Select
         label="Boot image"
         data={[{ value: NONE, label: "The boot menu, or the server's default boot image" }, ...images.choices]}
@@ -230,17 +255,21 @@ function ApproveForm({ requestId, label, onDone }: { requestId: number; label: s
         description="Relative to RemoteInstall."
       />
       <JoinDomainSwitch checked={join} onChange={setJoinDomain} standalone={standalone} />
-      {answer.error && (
-        <Alert color="red" icon={<IconAlertTriangle />}>
-          {answer.error.message}
+      {failures.length > 0 && (
+        <Alert color="red" icon={<IconAlertTriangle />} title={one ? undefined : `${failures.length} couldn't be approved`}>
+          {failures.map((failure) => (
+            <Text key={failure} size="sm">
+              {failure}
+            </Text>
+          ))}
         </Alert>
       )}
       <Group justify="flex-end">
         <Button variant="default" onClick={onDone}>
-          Cancel
+          {failures.length > 0 ? 'Close' : 'Cancel'}
         </Button>
-        <Button type="submit" loading={answer.isPending} disabled={!!nameProblem}>
-          Approve
+        <Button type="submit" loading={done !== null} disabled={!!nameProblem}>
+          {done !== null && !one ? `Approving ${done + 1} of ${requestIds.length}` : one ? 'Approve' : `Approve ${requestIds.length}`}
         </Button>
       </Group>
     </DialogForm>
@@ -310,6 +339,75 @@ export function ClearRequestsButton({ requests }: { requests: WdsRecord[] }) {
             onClick={confirm}
           >
             Clear
+          </Button>
+        </Group>
+      </Modal>
+    </>
+  )
+}
+
+/** What a request is called: its name, or its device ID, as WDS reports an unnamed request's name as empty. */
+const requestLabel = (request: WdsRecord) =>
+  asString(request.DeviceName) || asString(request.DeviceID) || `request ${String(request.RequestId)}`
+
+/** Approve or reject the requests chosen on the Devices page, all at once. */
+export function RequestBulkActions({ requests, onDone }: { requests: WdsRecord[]; onDone: () => void }) {
+  const answer = useAnswerDeviceRequest()
+  const [dialog, setDialog] = useState<'approve' | 'reject' | null>(null)
+  const [rejecting, setRejecting] = useState<number | null>(null)
+  const ids = requests.map((request) => asNumber(request.RequestId)).filter((id): id is number => id !== null)
+  const one = ids.length === 1
+  const label = one ? requestLabel(requests[0]) : `${ids.length} requests`
+
+  const reject = async () => {
+    const failed: string[] = []
+    for (const [index, requestId] of ids.entries()) {
+      setRejecting(index)
+      try {
+        await answer.mutateAsync({ requestId, approval: 'reject' })
+      } catch (error) {
+        failed.push(`Request ${requestId}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    setRejecting(null)
+    if (failed.length < ids.length) notifications.show({ color: 'green', message: one ? `Rejected ${label}` : `Rejected ${ids.length - failed.length} requests` })
+    if (failed.length > 0) failed.forEach((message) => notifications.show({ color: 'red', title: "Couldn't reject a request", message }))
+    setDialog(null)
+    onDone()
+  }
+
+  return (
+    <>
+      <Button size="xs" onClick={() => setDialog('approve')} leftSection={<IconCheck size={14} />}>
+        {one ? 'Approve…' : `Approve ${ids.length}…`}
+      </Button>
+      <Button size="xs" variant="light" color="red" onClick={() => setDialog('reject')} leftSection={<IconX size={14} />}>
+        {one ? 'Reject…' : `Reject ${ids.length}…`}
+      </Button>
+      <Modal opened={dialog === 'approve'} onClose={() => setDialog(null)} title={`Approve ${label}`} centered size="lg" closeOnClickOutside={false}>
+        {dialog === 'approve' && (
+          <ApproveForm
+            requestIds={ids}
+            label={label}
+            onDone={() => {
+              setDialog(null)
+              onDone()
+            }}
+          />
+        )}
+      </Modal>
+      <Modal opened={dialog === 'reject'} onClose={() => setDialog(null)} title={`Reject ${label}?`} centered>
+        <Text size="sm">
+          {one ? 'WDS tells the waiting client no, and it stops' : 'WDS tells the waiting clients no, and they stop'} network
+          booting. {one ? 'The request stays' : 'The requests stay'} on the list as rejected for the retention period set under
+          Pending devices.
+        </Text>
+        <Group justify="flex-end" mt="lg">
+          <Button variant="default" onClick={() => setDialog(null)}>
+            Cancel
+          </Button>
+          <Button color="red" loading={rejecting !== null} onClick={reject}>
+            {rejecting !== null && !one ? `Rejecting ${rejecting + 1} of ${ids.length}` : one ? 'Reject' : `Reject ${ids.length}`}
           </Button>
         </Group>
       </Modal>

@@ -1,8 +1,8 @@
-import { Alert, Button, Group, Loader, Modal, SegmentedControl, Select, Switch, Text, TextInput } from '@mantine/core'
+import { Alert, Autocomplete, Button, Group, Loader, Modal, SegmentedControl, Select, Switch, Text, TextInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useState } from 'react'
-import { useAddDevice, useBootImages, useChangeDevice, useServerConfig } from '../api/queries'
+import { useAddDevice, useBootImages, useChangeDevice, useDevices, useServerConfig } from '../api/queries'
 import type { DeviceChanges, WdsRecord } from '../api/types'
 import { bootImageChoices, devicePrompt, isDeviceId, isDeviceName, isPlaceholderGuid } from '../lib/devices'
 import { asString } from '../lib/records'
@@ -87,6 +87,9 @@ export function JoinDomainSwitch({ checked, onChange, standalone }: JoinDomainSw
 
 function DeviceForm({ device, seed, onDone, bootImages, standalone }: DeviceFormProps & { bootImages: WdsRecord[]; standalone: boolean }) {
   const add = useAddDevice()
+  // The groups other devices are in, offered as you type; any other name starts a new one.
+  const devices = useDevices()
+  const groups = [...new Set((devices.data?.prestaged ?? []).map((d) => asString(d.Group)).filter((g): g is string => !!g))].sort()
   const change = useChangeDevice()
   const error = add.error ?? change.error
 
@@ -187,7 +190,7 @@ function DeviceForm({ device, seed, onDone, bootImages, standalone }: DeviceForm
         placeholder="00-B0-56-88-2F-DC or {E8A3EFAC-201F-4E69-953E-B2DAA1E8B1B6}"
         styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
       />
-      <TextInput label="Group" value={group} onChange={(e) => setGroup(e.currentTarget.value)} description="Optional, for your own sorting." />
+      <Autocomplete label="Group" value={group} onChange={setGroup} data={groups} description="Optional, for your own sorting." comboboxProps={{ withinPortal: true }} />
       <Select
         label="PXE prompt"
         data={[{ value: NONE, label: "The server's policy for known clients" }, ...promptOptions]}
