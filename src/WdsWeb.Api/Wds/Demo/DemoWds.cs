@@ -257,6 +257,11 @@ public static class DemoWds
             Device("KIOSK-01", "{E8A3EFAC-201F-4E69-953E-B2DAA1E8B1B6}", "Kiosks", 0, null, null),
             Device("TRAINING-01", "00-00-5E-00-53-21", "Training rooms", "OptIn", null, @"WdsClientUnattend\training.xml"),
             Device("SRV-BUILD-01", "00-00-5E-00-53-31", "Servers", "OptOut", @"Boot\x64\Images\boot-ws2025-x64.wim", null),
+            // The sample boots that WDS answered as prestaged (see BootEvents).
+            Device("OFFICE-PC-09", "00-00-5E-00-53-37", "Office", 0, null, null),
+            Device("OFFICE-PC-14", "00-00-5E-00-53-41", "Office", 0, null, null),
+            Device("OFFICE-PC-22", "00-00-5E-00-53-63", "Office", 0, null, null),
+            Device("CLASS-PC-05", "00-00-5E-00-53-81", "Classrooms", 0, null, null),
         },
         autoAdd = new object[]
         {
@@ -406,8 +411,14 @@ public static class DemoWds
     {
         logStartsAt = Iso(now.AddDays(-9)),
         logMaxBytes = 67_108_864L,
-        events = BootEvents(now).Select(e => new { time = Iso(e.Time), id = e.Id, data = e.Data }).ToArray(),
+        events = BootEvents(now).Select((e, i) => new { time = Iso(e.Time), id = e.Id, recordId = FirstBootRecord + i, data = e.Data }).ToArray(),
     };
+
+    /// <summary>
+    /// The sample boots' events are numbered in time order, as a log numbers them, so each keeps its number
+    /// however often it's read.
+    /// </summary>
+    private const int FirstBootRecord = 48_000;
 
     /// <summary>A week of boots: installs finished, failed and under way, and machines at each stage of booting.</summary>
     private static List<DemoEvent> BootEvents(DateTimeOffset now)
@@ -537,24 +548,27 @@ public static class DemoWds
     private static object Events(DateTimeOffset now, IReadOnlyDictionary<string, object?>? parameters)
     {
         var hours = parameters?.GetValueOrDefault("Hours") is int h ? h : 72;
+        var max = parameters?.GetValueOrDefault("MaxEvents") is int m ? m : 300;
+        var problemsOnly = parameters?.GetValueOrDefault("ProblemsOnly") is true;
         var since = now.AddHours(-hours);
-        var recordId = 48_000;
         var events = BootEvents(now)
-            .Where(e => e.Id is BootActivity.PxeBoot or BootActivity.TftpCompleted or BootActivity.UnattendBlocked || DeploymentEvents.IsDeploymentEvent(e.Id))
-            .Select(e => Event(e.Time, e.Id, e.Log, e.Provider, e.Data, recordId++))
+            .Select((e, i) => (Event: e, RecordId: FirstBootRecord + i))
+            .Where(x => x.Event.Id is BootActivity.PxeBoot or BootActivity.TftpCompleted or BootActivity.UnattendBlocked || DeploymentEvents.IsDeploymentEvent(x.Event.Id))
+            .Select(x => Event(x.Event.Time, x.Event.Id, x.Event.Log, x.Event.Provider, x.Event.Data, x.RecordId))
             .Append(Event(now.AddHours(-30), 4101, "Operational", "Microsoft-Windows-Deployment-Services-Diagnostics",
-                new() { ["ClientIP"] = "192.0.2.88", ["FileName"] = @"\Boot\x64\Images\boot-win10-x64.wim", ["ErrorCode"] = "1460" }, recordId++))
-            .Append(Event(now.AddDays(-9).AddHours(-3).AddMinutes(2), 256, "Application", "WDSServer", new(), recordId++))
-            .Where(e => e.Time >= since)
+                new() { ["ClientIP"] = "192.0.2.88", ["FileName"] = @"\Boot\x64\Images\boot-win10-x64.wim", ["ErrorCode"] = "1460" }, FirstBootRecord - 2))
+            .Append(Event(now.AddDays(-9).AddHours(-3).AddMinutes(2), 256, "Application", "WDSServer", new(), FirstBootRecord - 1))
+            .Where(e => e.Time >= since && (!problemsOnly || e.Level is >= 1 and <= 3))
             .OrderByDescending(e => e.Time)
             .ToArray();
         return new
         {
-            events = events.Select(e => new
+            events = events.Take(max).Select(e => new
             {
                 time = Iso(e.Time), id = e.Id, level = e.Level, levelName = e.LevelName, log = e.Log, provider = e.Provider,
                 recordId = e.RecordId, message = e.Message, data = e.Data,
             }),
+            total = events.Length,
             routineHidden = 3_218,
             warnings = Array.Empty<string>(),
         };

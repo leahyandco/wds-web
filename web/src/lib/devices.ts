@@ -17,10 +17,24 @@ export const isGuid = (value: string) => /^\{?[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a
 
 export const isDeviceId = (value: string) => isMacAddress(value) || isGuid(value)
 
+const hex = (value: unknown) => String(value ?? '').replace(/[^0-9a-f]/gi, '').toUpperCase()
+
 /** The same MAC address or GUID, whatever the separators, braces or case. */
-const sameDeviceId = (a: unknown, b: unknown) => {
-  const hex = (value: unknown) => String(value ?? '').replace(/[^0-9a-f]/gi, '').toUpperCase()
-  return hex(a) !== '' && hex(a) === hex(b)
+const sameDeviceId = (a: unknown, b: unknown) => hex(a) !== '' && hex(a) === hex(b)
+
+/** The prestaged device a client is, by any of the IDs it reported (its MAC address and SMBIOS GUID). */
+export const prestagedDevice = (devices: WdsRecord[], ...ids: (string | null | undefined)[]) =>
+  devices.find((device) => ids.some((id) => sameDeviceId(id, device.DeviceID)))
+
+/**
+ * A boot image's name, from the path WDS uses for it: \Boot\x64\Images\boot.wim in TFTP events, or
+ * Boot\x64\Images\boot.wim for a device. The file name if no registered image has that file.
+ */
+export function bootImageName(bootImages: WdsRecord[], path: string): string {
+  const match = /(?:^|\\)boot\\([^\\]+)\\images\\([^\\]+)$/i.exec(path)
+  const image =
+    match && bootImages.find((i) => sameText(String(i.Architecture ?? ''), match[1]) && sameText(String(i.FileName ?? ''), match[2]))
+  return image ? String(image.Name) : (path.split('\\').pop() ?? path)
 }
 
 /** The approved request a prestaged device came from, while WDS still keeps it. */

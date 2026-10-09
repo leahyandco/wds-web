@@ -4,7 +4,8 @@ using System.Text.RegularExpressions;
 namespace WdsWeb.Api.Wds;
 
 /// <summary>An event from one of WDS's logs, with its named fields (ClientIP and so on).</summary>
-public sealed record WdsEventRecord(DateTimeOffset Time, int Id, IReadOnlyDictionary<string, string> Data);
+/// <param name="RecordId">The event's number in its log, which names the boot it starts; 0 if unknown.</param>
+public sealed record WdsEventRecord(DateTimeOffset Time, int Id, IReadOnlyDictionary<string, string> Data, long RecordId = 0);
 
 public enum BootStatus
 {
@@ -52,8 +53,10 @@ public enum BootNoteKind
 public sealed record BootNote(DateTimeOffset Time, BootNoteKind Kind);
 
 /// <summary>One client's PXE boot, the files it then fetched over TFTP, and the install that followed.</summary>
+/// <param name="Id">Names the boot while its events stay in the log, as it goes on and whenever the log is read again.</param>
 /// <param name="Deployment">The WDS client's progress; only logged while WDS client logging is on.</param>
 public sealed record BootSession(
+    string Id,
     string ClientIp,
     string? MacAddress,
     string? DeviceId,
@@ -120,7 +123,7 @@ public static partial class BootActivity
                 var clientMac = record.Data.GetValueOrDefault("ClientMAC");
                 if (MacKey(clientMac) is { } key && byMac.TryGetValue(key, out var sameMachine)) session = sameMachine;
                 var gap = session?.Deployment is { Active: true } ? DeploymentGap : SessionGap;
-                if (session is null || record.Time - session.LastSeen > gap) session = Start(ip, record.Time);
+                if (session is null || record.Time - session.LastSeen > gap) session = Start(record, ip);
                 session.Deployment ??= new DeploymentBuilder(record.Time);
                 session.Deployment.Apply(record);
                 session.MacAddress ??= clientMac;
@@ -142,7 +145,7 @@ public static partial class BootActivity
                         // Prestaged (or removed) since its last try, so WDS answers it differently now.
                         (session.Prestaged is not null && prestaged is not null && session.Prestaged != prestaged))
                     {
-                        session = Start(ip, record.Time, lookup: lookup);
+                        session = Start(record, ip, lookup: lookup);
                     }
                     session.MacAddress ??= mac;
                     session.DeviceId ??= record.Data.GetValueOrDefault("ClientDeviceID");
@@ -155,8 +158,8 @@ public static partial class BootActivity
 
                 case TftpStarted:
                     var file = record.Data.GetValueOrDefault("FileName") ?? "";
-                    if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(ip, record.Time);
-                    else if (session.Progressed && FirstBootProgram().IsMatch(file)) session = Start(ip, record.Time, sameClientAs: session);
+                    if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(record, ip);
+                    else if (session.Progressed && FirstBootProgram().IsMatch(file)) session = Start(record, ip, sameClientAs: session);
                     session.Transfers.Add(new Transfer(file, ParseLong(record.Data.GetValueOrDefault("FileSize")), record.Time));
                     break;
 
@@ -169,7 +172,7 @@ public static partial class BootActivity
                     }
                     else
                     {
-                        if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(ip, record.Time);
+                        if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(record, ip);
                         // The start scrolled out of the log; record the finish on its own.
                         transfer = new Transfer(fileName, ParseLong(record.Data.GetValueOrDefault("FileSize")), null);
                         session.Transfers.Add(transfer);
@@ -181,7 +184,7 @@ public static partial class BootActivity
 
                 case UnattendBlocked:
                     // Setup asks once WinPE is up, so this belongs to the boot that loaded the image.
-                    if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(ip, record.Time);
+                    if (session is null || record.Time - session.LastSeen > SessionGap) session = Start(record, ip);
                     session.Notes.Add(new BootNote(record.Time, BootNoteKind.UnattendBlocked));
                     break;
 
@@ -199,11 +202,11 @@ public static partial class BootActivity
         // sameClientAs: the session this boot follows on from moments later, when the new boot's own PXE
         // request (which says who the client is) wasn't logged. lookup: what to find the session by later,
         // when not the address.
-        Session Start(string ip, DateTimeOffset time, Session? sameClientAs = null, string? lookup = null)
+        Session Start(WdsEventRecord first, string ip, Session? sameClientAs = null, string? lookup = null)
         {
             // Whatever the client was doing at this address before, it has stopped.
             if (byIp.TryGetValue(lookup ?? ip, out var previous)) previous.Superseded = true;
-            var session = new Session(ip, time)
+            var session = new Session(SessionId(first, ip), ip, first.Time)
             {
                 MacAddress = sameClientAs?.MacAddress,
                 DeviceId = sameClientAs?.DeviceId,
@@ -234,6 +237,16 @@ public static partial class BootActivity
             return (null, null);
         }
     }
+
+    /// <summary>
+    /// A boot's name: the number of the event that started it, which stays the same however often the log is
+    /// read and however far the boot goes. The event ID goes with it, as the Admin log numbers its events
+    /// separately. Events read without their numbers fall back to the address and time.
+    /// </summary>
+    private static string SessionId(WdsEventRecord first, string ip) =>
+        first.RecordId > 0
+            ? string.Create(CultureInfo.InvariantCulture, $"{first.RecordId}-{first.Id}")
+            : string.Create(CultureInfo.InvariantCulture, $"{ip}-{first.Time.ToUnixTimeMilliseconds()}");
 
     /// <summary>A MAC address in one spelling, whatever separators an event used.</summary>
     private static string? MacKey(string? mac)
@@ -309,8 +322,9 @@ public static partial class BootActivity
         public TftpTransfer Build() => new(FileName, FileSize, StartedAt, FinishedAt, Succeeded, ErrorCode);
     }
 
-    private sealed class Session(string clientIp, DateTimeOffset firstSeen)
+    private sealed class Session(string id, string clientIp, DateTimeOffset firstSeen)
     {
+        public string Id { get; } = id;
         public string ClientIp { get; } = clientIp;
         public DateTimeOffset FirstSeen { get; } = firstSeen;
         public DateTimeOffset LastSeen { get; set; } = firstSeen;
@@ -339,7 +353,7 @@ public static partial class BootActivity
             var image = Transfers.LastOrDefault(t => IsBootImage(t.FileName));
 
             return new BootSession(
-                ClientIp, MacAddress, DeviceId, ArchitectureOf(Transfers), ArchitectureCode, Prestaged, FirstSeen, LastSeen,
+                Id, ClientIp, MacAddress, DeviceId, ArchitectureOf(Transfers), ArchitectureCode, Prestaged, FirstSeen, LastSeen,
                 StatusOf(image, now), image?.FileName, Transfers.Select(t => t.Build()).ToList(), Notes, Deployment?.Build());
         }
 

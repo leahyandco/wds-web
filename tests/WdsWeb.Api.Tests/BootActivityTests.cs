@@ -396,6 +396,39 @@ public class BootActivityTests
         });
     }
 
+    [Fact]
+    public void Names_each_boot_after_the_event_that_started_it_and_keeps_the_name_as_it_goes_on()
+    {
+        // Numbered as the log numbers them. The client boots twice; the second boot is still downloading.
+        var first = new[]
+        {
+            Pxe(0) with { RecordId = 101 },
+            Transfer(5, BootActivity.TftpStarted, Image) with { RecordId = 102 },
+            Transfer(15, BootActivity.TftpCompleted, Image) with { RecordId = 103 },
+            Pxe(120) with { RecordId = 104 },
+            Transfer(125, BootActivity.TftpStarted, Image) with { RecordId = 105 },
+        };
+        var later = first.Append(Transfer(140, BootActivity.TftpCompleted, Image) with { RecordId = 106 }).ToArray();
+
+        var before = BootActivity.Build(first, T0.AddMinutes(3));
+        var after = BootActivity.Build(later, T0.AddMinutes(4));
+
+        Assert.Equal(["104-4096", "101-4096"], before.Select(s => s.Id));
+        Assert.Equal(before.Select(s => s.Id), after.Select(s => s.Id));
+        Assert.Equal([BootStatus.Downloading, BootStatus.Loaded], before.Select(s => s.Status));
+        Assert.Equal([BootStatus.Loaded, BootStatus.Loaded], after.Select(s => s.Status));
+    }
+
+    [Fact]
+    public void Names_boots_by_address_and_time_when_events_come_without_numbers()
+    {
+        var sessions = BootActivity.Build([Pxe(0), Transfer(5, BootActivity.TftpStarted, Image), Transfer(15, BootActivity.TftpCompleted, Image), Pxe(120)], T0.AddMinutes(5));
+
+        Assert.Equal(
+            [$"{Ip}-{T0.AddSeconds(120).ToUnixTimeMilliseconds()}", $"{Ip}-{T0.ToUnixTimeMilliseconds()}"],
+            sessions.Select(s => s.Id));
+    }
+
     // A WDS client event as client logging records it: the MAC address with every event.
     private static WdsEventRecord Client(int seconds, int id, string ip, params (string Name, string Value)[] fields)
     {

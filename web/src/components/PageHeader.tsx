@@ -11,10 +11,11 @@ interface PageHeaderProps {
   actions?: ReactNode
 }
 
+/** The page's title and buttons; on a narrow screen the buttons wrap below the title. */
 export function PageHeader({ title, description, onRefresh, refreshing, actions }: PageHeaderProps) {
   return (
-    <Group justify="space-between" align="flex-end" mb="lg" wrap="nowrap">
-      <div>
+    <Group justify="space-between" align="flex-end" mb="lg" gap="sm">
+      <div style={{ flex: '1 1 20rem', minWidth: 0 }}>
         <Title order={2}>{title}</Title>
         {description && (
           <Text c="dimmed" size="sm" mt={4}>
@@ -22,7 +23,7 @@ export function PageHeader({ title, description, onRefresh, refreshing, actions 
           </Text>
         )}
       </div>
-      <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0 }}>
+      <Group gap="sm">
         {actions}
         {onRefresh && (
           <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={onRefresh} loading={refreshing}>

@@ -10,7 +10,9 @@ import {
   Group,
   Menu,
   Modal,
+  List,
   Pagination,
+  ScrollArea,
   Select,
   SimpleGrid,
   Stack,
@@ -33,6 +35,8 @@ import {
 } from '../api/queries'
 import type { DriverCatalog, DriverGroup, DriverPackage, DriverPackageAction } from '../api/types'
 import { AddDriversDialog } from '../components/AddDriversDialog'
+import { CopyValue } from '../components/Copy'
+import { DialogForm } from '../components/DialogForm'
 import { DriverGroupEditor } from '../components/DriverGroupEditor'
 import { ImportJobs } from '../components/ImportJobs'
 import { PageHeader } from '../components/PageHeader'
@@ -122,8 +126,17 @@ function DriverStore({ catalog, group, onGroup, onEditGroup }: DriverStoreProps)
   )
   const pages = Math.max(1, Math.ceil(matching.length / PAGE_SIZE))
   const shown = matching.slice((Math.min(page, pages) - 1) * PAGE_SIZE, Math.min(page, pages) * PAGE_SIZE)
-  // Packages chosen that still exist; a refresh may have removed some.
-  const selection = catalog.packages.filter((p) => chosen.has(p.id))
+  // The packages chosen among those listed: the bar acts only on what the group, class and search show, and a
+  // refresh may have removed some.
+  const selection = matching.filter((p) => chosen.has(p.id))
+  // Narrowing the list drops the chosen packages it hides, so widening it again doesn't bring them back.
+  const filters = `${group}|${driverClass}|${needle}`
+  const [prunedFor, setPrunedFor] = useState(filters)
+  if (prunedFor !== filters) {
+    setPrunedFor(filters)
+    const listed = new Set(matching.map((p) => p.id))
+    setChosen((previous) => new Set([...previous].filter((id) => listed.has(id))))
+  }
   const open = catalog.packages.find((p) => p.id === openId) ?? null
 
   const filterChanged = <T,>(set: (value: T) => void) => (value: T) => {
@@ -489,6 +502,7 @@ interface DriverDetailProps {
 function DriverDetail({ driver, groups, busy, onAction, onRemove, onBootImage }: DriverDetailProps) {
   const rename = useChangeDriverPackage()
   const [name, setName] = useState(driver.name)
+  const canRename = name.trim() !== '' && name.trim() !== driver.name
   const others = groups.filter((g) => !driver.groups.includes(g.name))
 
   const saveName = async () => {
@@ -500,17 +514,17 @@ function DriverDetail({ driver, groups, busy, onAction, onRemove, onBootImage }:
     }
   }
 
-  const facts: [string, string][] = [
-    ['Provider', driver.provider ?? EMPTY],
-    ['Class', driver.className ? `${driver.className} ${driver.classGuid ?? ''}` : EMPTY],
-    ['Architecture', driver.architecture ?? EMPTY],
-    ['Version', driver.version ?? EMPTY],
-    ['Driver date', formatDate(driver.date)],
-    ['Added to WDS', formatDateTime(driver.dateAdded)],
-    ['Signature', driver.signed ? 'Valid' : 'Not signed'],
-    ['Locale', driver.locale ?? EMPTY],
-    ['INF file', driver.infPath ?? EMPTY],
-    ['Package ID', driver.id],
+  const facts: { label: string; value: ReactNode }[] = [
+    { label: 'Provider', value: driver.provider ?? EMPTY },
+    { label: 'Class', value: driver.className ? `${driver.className} ${driver.classGuid ?? ''}` : EMPTY },
+    { label: 'Architecture', value: driver.architecture ?? EMPTY },
+    { label: 'Version', value: driver.version ?? EMPTY },
+    { label: 'Driver date', value: formatDate(driver.date) },
+    { label: 'Added to WDS', value: formatDateTime(driver.dateAdded) },
+    { label: 'Signature', value: driver.signed ? 'Valid' : 'Not signed' },
+    { label: 'Locale', value: driver.locale ?? EMPTY },
+    { label: 'INF file', value: driver.infPath ? <CopyValue value={driver.infPath} label="Copy the INF path" /> : EMPTY },
+    { label: 'Package ID', value: <CopyValue value={driver.id} label="Copy the package ID" monospace /> },
   ]
 
   return (
@@ -522,12 +536,19 @@ function DriverDetail({ driver, groups, busy, onAction, onRemove, onBootImage }:
         disabled={busy}
         onChange={(event) => onAction(event.currentTarget.checked ? 'enable' : 'disable')}
       />
-      <Group align="flex-end" gap="xs">
-        <TextInput label="Name" value={name} onChange={(event) => setName(event.currentTarget.value)} style={{ flex: 1 }} />
-        <Button variant="default" onClick={saveName} loading={rename.isPending} disabled={!name.trim() || name.trim() === driver.name}>
-          Rename
-        </Button>
-      </Group>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (canRename) void saveName()
+        }}
+      >
+        <Group align="flex-end" gap="xs">
+          <TextInput label="Name" value={name} onChange={(event) => setName(event.currentTarget.value)} style={{ flex: 1 }} />
+          <Button type="submit" variant="default" loading={rename.isPending} disabled={!canRename}>
+            Rename
+          </Button>
+        </Group>
+      </form>
       <div>
         <Text size="sm" fw={500} mb={6}>
           Driver groups
@@ -567,7 +588,7 @@ function DriverDetail({ driver, groups, busy, onAction, onRemove, onBootImage }:
       </div>
       <Table withRowBorders={false} verticalSpacing={4} layout="fixed">
         <Table.Tbody>
-          {facts.map(([label, value]) => (
+          {facts.map(({ label, value }) => (
             <Table.Tr key={label}>
               <Table.Td w="32%" style={{ verticalAlign: 'top' }}>
                 <Text size="sm" c="dimmed">
@@ -575,9 +596,13 @@ function DriverDetail({ driver, groups, busy, onAction, onRemove, onBootImage }:
                 </Text>
               </Table.Td>
               <Table.Td>
-                <Text size="sm" style={{ wordBreak: 'break-all' }}>
-                  {value}
-                </Text>
+                {typeof value === 'string' ? (
+                  <Text size="sm" style={{ wordBreak: 'break-all' }}>
+                    {value}
+                  </Text>
+                ) : (
+                  value
+                )}
               </Table.Td>
             </Table.Tr>
           ))}
@@ -613,6 +638,20 @@ function RemovePackagesDialog({
         {one ? 'The package is' : 'The packages are'} deleted from the WDS driver store and taken out of every group. Installs already done keep
         their drivers.
       </Text>
+      {packages && packages.length > 1 && (
+        <ScrollArea.Autosize mah={240} mt="sm" type="auto">
+          <List size="sm" spacing={2}>
+            {packages.map((p) => (
+              <List.Item key={p.id}>
+                {p.name}
+                <Text span size="xs" c="dimmed">
+                  {[p.provider, p.version, p.groups.length > 0 ? p.groups.join(', ') : null].filter(Boolean).map((part) => ` · ${part}`)}
+                </Text>
+              </List.Item>
+            ))}
+          </List>
+        </ScrollArea.Autosize>
+      )}
       <Group justify="flex-end" mt="lg">
         <Button variant="default" onClick={onCancel}>
           Cancel
@@ -655,7 +694,7 @@ function AddToBootImageDialog({ packages, onClose }: { packages: DriverPackage[]
 
   return (
     <Modal opened={packages !== null} onClose={onClose} title={`Add ${plural(packages?.length ?? 0, 'package')} to a boot image`} centered size="lg">
-      <Stack>
+      <DialogForm onSubmit={() => void start()} canSubmit={!!image && architectures.length <= 1}>
         <Text size="sm">
           For drivers WinPE needs before Windows is installed, such as network and storage drivers. WDS writes each package into the
           boot image file, which takes a minute or two each.
@@ -689,11 +728,11 @@ function AddToBootImageDialog({ packages, onClose }: { packages: DriverPackage[]
           <Button variant="default" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={start} loading={add.isPending} disabled={!image || architectures.length > 1}>
+          <Button type="submit" loading={add.isPending} disabled={!image || architectures.length > 1}>
             Add to boot image
           </Button>
         </Group>
-      </Stack>
+      </DialogForm>
     </Modal>
   )
 }

@@ -21,8 +21,8 @@ same network, and signs people in with their Windows accounts.
   the answered requests WDS would otherwise keep acting on.
 - **Boot activity**: every PXE boot, how far it got (the network boot prompt, the boot menu, the boot
   image download) and what it downloaded, and with WDS client logging on, the install that followed:
-  which image was chosen, by whom, how long the apply took, and any errors. Prestage a device straight
-  from one of its boots.
+  which image was chosen, by whom, how long the apply took, and any errors, updated as it goes. Search
+  by MAC address, IP, device name or status, and prestage a device straight from one of its boots.
 - **Server settings**: PXE response, boot programs and default boot images, the WDS client, pending
   devices, network interfaces, TFTP and multicast, and the hands-free deployment override.
 - **Drivers**: add drivers from an uploaded .zip or .cab, or a folder on the server, a driver group at a

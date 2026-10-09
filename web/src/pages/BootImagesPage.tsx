@@ -51,6 +51,7 @@ export function BootImagesPage() {
           {(rows) => (
             <RecordTable
               rows={[...rows].sort(byDisplayOrder)}
+              rowKey={(row) => `${String(row.Architecture)}|${String(row.FileName)}`}
               columns={columns}
               empty="No boot images are registered."
               detailTitle={(row) => String(pick(row, 'Name') ?? 'Boot image')}

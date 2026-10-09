@@ -47,12 +47,13 @@ public static class WdsEndpoints
             return WdsUtilDriverParser.Parse(reports.GetProperty("packages").GetString() ?? "", reports.GetProperty("groups").GetString() ?? "");
         });
 
-        api.MapGet("/events", (int? hours, int? max, bool? routine, WdsScriptRunner wds, CancellationToken ct) =>
+        api.MapGet("/events", (int? hours, int? max, bool? routine, bool? problems, WdsScriptRunner wds, CancellationToken ct) =>
             wds.RunAsync("Get-Events", new Dictionary<string, object?>
             {
                 ["Hours"] = Math.Clamp(hours ?? 72, 1, MaxHours),
                 ["MaxEvents"] = Math.Clamp(max ?? 300, 1, 5000),
                 ["IncludeRoutine"] = routine ?? false,
+                ["ProblemsOnly"] = problems ?? false,
             }, ct: ct));
 
         api.MapGet("/activity", async (int? hours, WdsScriptRunner wds, CancellationToken ct) =>
@@ -65,7 +66,8 @@ public static class WdsEndpoints
             var events = result.GetProperty("events").EnumerateArray().Select(e => new WdsEventRecord(
                 e.GetProperty("time").GetDateTimeOffset(),
                 e.GetProperty("id").GetInt32(),
-                e.GetProperty("data").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString() ?? "")));
+                e.GetProperty("data").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString() ?? ""),
+                e.TryGetProperty("recordId", out var recordId) && recordId.TryGetInt64(out var number) ? number : 0));
 
             return new ActivityResponse(
                 BootActivity.Build(events, DateTimeOffset.UtcNow),

@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useAddDriverGroup, useChangeDriverGroup } from '../api/queries'
 import type { DriverGroup, DriverGroupFilter } from '../api/types'
 import { chassisTypes, filterTypes } from '../lib/drivers'
+import { DialogForm } from './DialogForm'
 
 interface DriverGroupEditorProps {
   opened: boolean
@@ -18,7 +19,7 @@ interface DriverGroupEditorProps {
 /** Creates a driver group, or changes one's name, state, applicability and filters. */
 export function DriverGroupEditor({ opened, group, names, onClose }: DriverGroupEditorProps) {
   return (
-    <Modal opened={opened} onClose={onClose} size="xl" title={group ? `Change ${group.name}` : 'New driver group'}>
+    <Modal opened={opened} onClose={onClose} size="xl" title={group ? `Change ${group.name}` : 'New driver group'} closeOnClickOutside={false}>
       {/* Mounted only while open, so each opening starts from the group as it is now. */}
       {opened && <GroupForm group={group} names={names} onDone={onClose} />}
     </Modal>
@@ -77,7 +78,7 @@ function GroupForm({ group, names, onDone }: { group: DriverGroup | null; names:
   }
 
   return (
-    <Stack>
+    <DialogForm onSubmit={() => void save()} canSubmit={ready}>
       <TextInput
         label="Name"
         value={name}
@@ -195,10 +196,10 @@ function GroupForm({ group, names, onDone }: { group: DriverGroup | null; names:
         <Button variant="default" onClick={onDone}>
           Cancel
         </Button>
-        <Button onClick={save} loading={add.isPending || change.isPending} disabled={!ready}>
+        <Button type="submit" loading={add.isPending || change.isPending} disabled={!ready}>
           {group ? 'Save' : 'Create'}
         </Button>
       </Group>
-    </Stack>
+    </DialogForm>
   )
 }

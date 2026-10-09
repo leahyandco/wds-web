@@ -57,7 +57,9 @@ export function AppLayout({ session }: { session: SessionInfo }) {
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Toggle navigation" />
-            <Title order={4}>WDS Console</Title>
+            <Title order={4} style={{ whiteSpace: 'nowrap' }}>
+              WDS Console
+            </Title>
           </Group>
           <Group gap="sm" wrap="nowrap">
             <ServerStatus />
@@ -107,7 +109,8 @@ function ServerStatus() {
 
   return (
     <Tooltip label={tooltip} multiline maw={360}>
-      <Badge variant="dot" color={color} size="lg" tt="none">
+      {/* On a phone a long server name is cut short, to leave room for the title and buttons beside it. */}
+      <Badge variant="dot" color={color} size="lg" tt="none" maw={{ base: 130, sm: 360 }} styles={{ root: { minWidth: 0 } }}>
         {connection.data?.target ?? '…'}
         {connection.data?.mode === 'Remote' ? ' (remote)' : connection.data?.mode === 'Demo' ? ' (demo)' : ''}
       </Badge>
@@ -125,21 +128,36 @@ function Version() {
   )
 }
 
+/** Who's signed in, and Sign out: a button with the name, or on a phone an icon whose menu names them. */
 function UserMenu({ userName }: { userName: string }) {
   const signOut = useSignOut()
+  const dropdown = (
+    <Menu.Dropdown>
+      <Menu.Label>Signed in as {userName}</Menu.Label>
+      <Menu.Item leftSection={<IconLogout size={14} />} onClick={() => signOut.mutate()}>
+        Sign out
+      </Menu.Item>
+    </Menu.Dropdown>
+  )
   return (
-    <Menu position="bottom-end" withinPortal>
-      <Menu.Target>
-        <Button variant="default" leftSection={<IconUser size={16} />} loading={signOut.isPending} visibleFrom="sm">
-          {userName}
-        </Button>
-      </Menu.Target>
-      <Menu.Dropdown>
-        <Menu.Item leftSection={<IconLogout size={14} />} onClick={() => signOut.mutate()}>
-          Sign out
-        </Menu.Item>
-      </Menu.Dropdown>
-    </Menu>
+    <>
+      <Menu position="bottom-end" withinPortal>
+        <Menu.Target>
+          <Button variant="default" leftSection={<IconUser size={16} />} loading={signOut.isPending} visibleFrom="sm">
+            {userName}
+          </Button>
+        </Menu.Target>
+        {dropdown}
+      </Menu>
+      <Menu position="bottom-end" withinPortal>
+        <Menu.Target>
+          <ActionIcon variant="default" size="lg" aria-label={`Signed in as ${userName}`} loading={signOut.isPending} hiddenFrom="sm">
+            <IconUser size={18} />
+          </ActionIcon>
+        </Menu.Target>
+        {dropdown}
+      </Menu>
+    </>
   )
 }
 

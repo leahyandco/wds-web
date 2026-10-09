@@ -1,4 +1,4 @@
-import { Alert, Center, Loader } from '@mantine/core'
+import { Alert, Button, Center, Loader, Text } from '@mantine/core'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
@@ -37,15 +37,7 @@ export function App() {
       </Center>
     )
   }
-  if (session.isError) {
-    return (
-      <Center mih="100vh" p="md">
-        <Alert color="red" icon={<IconAlertTriangle />} title="Can't reach the WDS Console service" maw={480}>
-          {session.error.message}
-        </Alert>
-      </Center>
-    )
-  }
+  if (session.isError) return <ServiceUnreachable message={session.error.message} onRetry={session.refetch} retrying={session.isFetching} />
   if (!session.data.authenticated) return <SignInPage server={session.data.server} />
 
   return (
@@ -62,5 +54,29 @@ export function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
+  )
+}
+
+const RETRY_SECONDS = 5
+
+/** The service didn't answer, usually because it's restarting (after an update, say): keep trying until it does. */
+function ServiceUnreachable({ message, onRetry, retrying }: { message: string; onRetry: () => unknown; retrying: boolean }) {
+  useEffect(() => {
+    const timer = setInterval(onRetry, RETRY_SECONDS * 1000)
+    return () => clearInterval(timer)
+  }, [onRetry])
+
+  return (
+    <Center mih="100vh" p="md">
+      <Alert color="red" icon={<IconAlertTriangle />} title="Can't reach the WDS Console service" maw={480}>
+        <Text size="sm">{message}</Text>
+        <Text size="sm" c="dimmed" mt="xs">
+          Trying again every {RETRY_SECONDS} seconds; this page carries on by itself once the service answers.
+        </Text>
+        <Button mt="sm" size="xs" variant="light" color="red" onClick={onRetry} loading={retrying}>
+          Try now
+        </Button>
+      </Alert>
+    </Center>
   )
 }

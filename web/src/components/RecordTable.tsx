@@ -14,6 +14,11 @@ export interface RecordColumn {
 
 interface RecordTableProps {
   rows: WdsRecord[]
+  /**
+   * What tells a row's object apart from the others. Rows hold their menus' open dialogs, so a refresh that
+   * reorders the list must keep each row with its own object.
+   */
+  rowKey: (row: WdsRecord) => string
   columns: RecordColumn[]
   empty: string
   detailTitle?: (row: WdsRecord) => string
@@ -23,7 +28,7 @@ interface RecordTableProps {
  * A table of WDS objects. Clicking a row opens all of its properties in a drawer, so nothing the WDS
  * module reports is hidden behind the column choice.
  */
-export function RecordTable({ rows, columns, empty, detailTitle }: RecordTableProps) {
+export function RecordTable({ rows, rowKey, columns, empty, detailTitle }: RecordTableProps) {
   const [selected, setSelected] = useState<WdsRecord | null>(null)
 
   if (rows.length === 0) {
@@ -46,9 +51,9 @@ export function RecordTable({ rows, columns, empty, detailTitle }: RecordTablePr
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {rows.map((row, index) => (
+            {rows.map((row) => (
               <Table.Tr
-                key={index}
+                key={rowKey(row)}
                 tabIndex={0}
                 style={{ cursor: 'pointer' }}
                 onClick={() => setSelected(row)}

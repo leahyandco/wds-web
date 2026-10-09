@@ -1,16 +1,18 @@
-import { Alert, Anchor, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, Timeline, Title } from '@mantine/core'
-import { IconAlertTriangle, IconDeviceDesktopPlus, IconInfoCircle } from '@tabler/icons-react'
-import { useState } from 'react'
-import { Link } from 'react-router'
-import { useActivity, useDevices, useServerConfig } from '../api/queries'
+import { Alert, Anchor, Badge, Button, Card, Code, Drawer, Group, SegmentedControl, Stack, Table, Text, TextInput, Timeline, Title } from '@mantine/core'
+import { IconAlertTriangle, IconDeviceDesktopPlus, IconInfoCircle, IconSearch } from '@tabler/icons-react'
+import { useState, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router'
+import { useActivity, useBootImages, useDevices, useServerConfig } from '../api/queries'
 import type { BootSession, Deployment, TftpTransfer, WdsRecord } from '../api/types'
 import { BootStatusBadge } from '../components/BootStatusBadge'
+import { CopyValue } from '../components/Copy'
 import { DeploymentStageBadge } from '../components/DeploymentStageBadge'
 import { DeviceEditor } from '../components/DeviceEditor'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
-import { architectureLabel, baseName, bootStatus, clientAddress, imageSeconds } from '../lib/boot'
+import { architectureLabel, bootStatus, clientAddress, imageSeconds } from '../lib/boot'
 import { deploymentStage } from '../lib/deployments'
+import { bootImageName, prestagedDevice } from '../lib/devices'
 import { EMPTY, formatAgo, formatBytes, formatDateTime } from '../lib/format'
 import { findValue, isYes } from '../lib/wdsutil'
 
@@ -20,17 +22,83 @@ const ranges = [
   { label: '7 days', value: '168' },
 ]
 
+/** What the page knows about a boot beyond the boot itself, from the device and boot image lists. */
+interface BootNames {
+  /** The prestaged device the client is now, if it is one. */
+  device: (session: BootSession) => WdsRecord | undefined
+  /** The boot image's name in WDS, or its file name if WDS no longer has it. */
+  image: (session: BootSession) => string | null
+}
+
+const hexOnly = (value: string | null | undefined) => (value ?? '').replace(/[^0-9a-f]/gi, '').toLowerCase()
+
+/** Whether a boot matches a search, by any of what the table shows; a MAC address matches with any separators. */
+function matches(session: BootSession, names: BootNames, needle: string) {
+  const device = names.device(session)
+  const texts = [
+    session.macAddress,
+    session.clientIp,
+    session.deviceId,
+    session.architecture,
+    device ? String(device.DeviceName) : null,
+    names.image(session),
+    session.bootImage,
+    bootStatus[session.status].label,
+    session.deployment ? deploymentStage[session.deployment.stage].label : null,
+    session.deployment?.imageName,
+    session.deployment?.userName,
+    session.notes.some((note) => note.kind === 'notRecognized') ? 'Not prestaged' : null,
+    session.notes.some((note) => note.kind === 'unattendBlocked') ? 'Unattend refused' : null,
+  ]
+  const digits = needle.replace(/[-:. ]/g, '')
+  return (
+    texts.some((text) => text?.toLowerCase().includes(needle)) ||
+    (/^[0-9a-f]{4,}$/.test(digits) && hexOnly(session.macAddress).includes(digits))
+  )
+}
+
 export function ActivityPage() {
   const [hours, setHours] = useState('72')
-  const [selected, setSelected] = useState<BootSession | null>(null)
+  // The open boot and the search are in the address, so they survive a reload and other pages can link to a boot.
+  const [params, setParams] = useSearchParams()
+  const bootId = params.get('boot')
+  // The box keeps its own text, as the address updates a moment later; reading it back would drop keystrokes.
+  const [search, setSearch] = useState(() => params.get('q') ?? '')
   const [prestaging, setPrestaging] = useState<BootSession | null>(null)
   const query = useActivity(Number(hours))
   const config = useServerConfig()
   const devices = useDevices()
+  const bootImages = useBootImages()
   const clientLogging = config.data ? findValue(config.data.sections, ['WDS Client Policy', 'Logging policy', 'Enabled']) : null
   const serverUnattend = config.data ? isYes(findValue(config.data.sections, ['WDS Client Policy', 'Unattend policy', 'Enabled'])) : false
   const standalone = config.data ? isYes(findValue(config.data.sections, ['Server State', 'Standalone configuration'])) : false
-  const unattendExpected = (session: BootSession) => serverUnattend || deviceUnattend(session, devices.data?.prestaged ?? [])
+
+  const names: BootNames = {
+    device: (session) => prestagedDevice(devices.data?.prestaged ?? [], session.macAddress, session.deviceId),
+    image: (session) => (session.bootImage ? bootImageName(bootImages.data ?? [], session.bootImage) : null),
+  }
+  // Whether WDS would have given the client an unattend file: the server's, or its prestaged device's own.
+  const unattendExpected = (session: BootSession) =>
+    serverUnattend || String(names.device(session)?.WdsClientUnattend ?? '').trim() !== ''
+
+  const setParam = (name: string, value: string | null) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (value) next.set(name, value)
+        else next.delete(name)
+        return next
+      },
+      { replace: true },
+    )
+
+  // The open boot follows each refresh, so an install being watched moves on. If a refresh no longer has the
+  // boot (after choosing a shorter range, say), the last copy stays open.
+  const found = bootId ? query.data?.sessions.find((session) => session.id === bootId) : undefined
+  const [kept, setKept] = useState<BootSession | null>(null)
+  if (found && found !== kept) setKept(found)
+  const selected = found ?? (kept && kept.id === bootId ? kept : null)
+  const selectedDevice = selected ? names.device(selected) : undefined
 
   return (
     <>
@@ -40,51 +108,73 @@ export function ActivityPage() {
         onRefresh={() => void query.refetch()}
         refreshing={query.isFetching}
       />
-      <Group mb="md">
+      <Group mb="md" gap="sm">
         <SegmentedControl data={ranges} value={hours} onChange={setHours} />
+        <TextInput
+          placeholder="Search MAC, IP, name, image or status"
+          aria-label="Search boots"
+          leftSection={<IconSearch size={16} />}
+          value={search}
+          onChange={(event) => {
+            setSearch(event.currentTarget.value)
+            setParam('q', event.currentTarget.value || null)
+          }}
+          style={{ flex: 1, minWidth: 220 }}
+        />
       </Group>
 
       <QueryState query={query}>
-        {(activity) => (
-          <Stack>
-            {clientLogging !== null && !isYes(clientLogging) && (
-              <Alert color="blue" icon={<IconInfoCircle />}>
-                To follow installs here (which image each machine chose, and how far it got), turn on WDS client logging under{' '}
-                <Anchor component={Link} to="/server" inherit>
-                  Server settings → WDS client
-                </Anchor>
-                .
-              </Alert>
-            )}
-            {activity.logStartsAt && (
-              <Alert color="blue" icon={<IconInfoCircle />}>
-                WDS keeps only {formatBytes(activity.logMaxBytes)} of these events, which currently reaches back to{' '}
-                {formatDateTime(activity.logStartsAt)}. Earlier boots aren't recorded anywhere.
-              </Alert>
-            )}
-            <Card withBorder p={0}>
-              {activity.sessions.length === 0 ? (
-                <Text c="dimmed" ta="center" py="xl">
-                  No PXE boots in this period.
-                </Text>
-              ) : (
-                <SessionTable sessions={activity.sessions} unattendExpected={unattendExpected} onSelect={setSelected} />
+        {(activity) => {
+          const needle = search.trim().toLowerCase()
+          const visible = needle ? activity.sessions.filter((session) => matches(session, names, needle)) : activity.sessions
+          return (
+            <Stack>
+              {clientLogging !== null && !isYes(clientLogging) && (
+                <Alert color="blue" icon={<IconInfoCircle />}>
+                  To follow installs here (which image each machine chose, and how far it got), turn on WDS client logging under{' '}
+                  <Anchor component={Link} to="/server" inherit>
+                    Server settings → WDS client
+                  </Anchor>
+                  .
+                </Alert>
               )}
-            </Card>
-          </Stack>
-        )}
+              {activity.logStartsAt && (
+                <Alert color="blue" icon={<IconInfoCircle />}>
+                  WDS keeps only {formatBytes(activity.logMaxBytes)} of these events, which currently reaches back to{' '}
+                  {formatDateTime(activity.logStartsAt)}. Earlier boots aren't recorded anywhere.
+                </Alert>
+              )}
+              <Card withBorder p={0}>
+                {visible.length === 0 ? (
+                  <Text c="dimmed" ta="center" py="xl">
+                    {activity.sessions.length === 0 ? 'No PXE boots in this period.' : 'No boots match.'}
+                  </Text>
+                ) : (
+                  <SessionTable
+                    sessions={visible}
+                    names={names}
+                    unattendExpected={unattendExpected}
+                    onSelect={(session) => setParam('boot', session.id)}
+                  />
+                )}
+              </Card>
+            </Stack>
+          )
+        }}
       </QueryState>
 
       <Drawer
         opened={selected !== null}
-        onClose={() => setSelected(null)}
+        onClose={() => setParam('boot', null)}
         position="right"
         size="xl"
-        title={selected ? `Boot from ${selected.macAddress ?? selected.clientIp}` : undefined}
+        title={selected ? `Boot from ${selectedDevice ? String(selectedDevice.DeviceName) : (selected.macAddress ?? selected.clientIp)}` : undefined}
       >
         {selected && (
           <SessionDetail
             session={selected}
+            device={selectedDevice}
+            imageName={names.image(selected)}
             unattendExpected={unattendExpected(selected)}
             standalone={standalone}
             onPrestage={() => setPrestaging(selected)}
@@ -101,21 +191,15 @@ export function ActivityPage() {
   )
 }
 
-/** Whether the client's prestaged device has its own WDS client unattend file. */
-function deviceUnattend(session: BootSession, devices: WdsRecord[]) {
-  const hex = (value: unknown) => String(value ?? '').replace(/[^0-9a-f]/gi, '').toUpperCase()
-  const ids = [session.macAddress, session.deviceId].map(hex).filter(Boolean)
-  return devices.some((device) => ids.includes(hex(device.DeviceID)) && String(device.WdsClientUnattend ?? '').trim() !== '')
-}
-
 interface SessionTableProps {
   sessions: BootSession[]
+  names: BootNames
   /** Whether WDS would have given the client an unattend file; if not, refusing to changes nothing. */
   unattendExpected: (session: BootSession) => boolean
   onSelect: (session: BootSession) => void
 }
 
-function SessionTable({ sessions, unattendExpected, onSelect }: SessionTableProps) {
+function SessionTable({ sessions, names, unattendExpected, onSelect }: SessionTableProps) {
   return (
     <Table.ScrollContainer minWidth={860}>
       <Table striped highlightOnHover verticalSpacing="sm">
@@ -133,9 +217,10 @@ function SessionTable({ sessions, unattendExpected, onSelect }: SessionTableProp
           {sessions.map((session) => {
             const seconds = imageSeconds(session)
             const image = session.transfers.findLast((t) => t.fileName === session.bootImage)
+            const device = names.device(session)
             return (
               <Table.Tr
-                key={`${session.clientIp}-${session.firstSeen}`}
+                key={session.id}
                 tabIndex={0}
                 style={{ cursor: 'pointer' }}
                 onClick={() => onSelect(session)}
@@ -148,12 +233,25 @@ function SessionTable({ sessions, unattendExpected, onSelect }: SessionTableProp
                   </Text>
                 </Table.Td>
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                  <Text size="sm" ff="monospace">
-                    {session.macAddress ?? 'Unknown MAC'}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {clientAddress(session)}
-                  </Text>
+                  {device ? (
+                    <>
+                      <Text size="sm" fw={500}>
+                        {String(device.DeviceName)}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {[session.macAddress, clientAddress(session)].filter(Boolean).join(' · ')}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text size="sm" ff="monospace">
+                        {session.macAddress ?? 'Unknown MAC'}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {clientAddress(session)}
+                      </Text>
+                    </>
+                  )}
                 </Table.Td>
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>
                   <Text size="sm">{architectureLabel(session)}</Text>
@@ -174,7 +272,7 @@ function SessionTable({ sessions, unattendExpected, onSelect }: SessionTableProp
                   </Group>
                 </Table.Td>
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                  <Text size="sm">{session.bootImage ? baseName(session.bootImage) : EMPTY}</Text>
+                  <Text size="sm">{names.image(session) ?? EMPTY}</Text>
                   {(seconds != null || image?.fileSize) && (
                     <Text size="xs" c="dimmed">
                       {[seconds != null ? `${seconds.toFixed(0)} s` : null, image?.fileSize ? formatBytes(image.fileSize) : null]
@@ -208,21 +306,32 @@ function SessionTable({ sessions, unattendExpected, onSelect }: SessionTableProp
 
 interface SessionDetailProps {
   session: BootSession
+  /** The prestaged device the client is now, if it is one. */
+  device: WdsRecord | undefined
+  imageName: string | null
   unattendExpected: boolean
   /** A standalone WDS server has no domain to join devices to. */
   standalone: boolean
   onPrestage: () => void
 }
 
-function SessionDetail({ session, unattendExpected, standalone, onPrestage }: SessionDetailProps) {
-  const facts: [string, string][] = [
-    ['MAC address', session.macAddress ?? EMPTY],
-    ['IP address', clientAddress(session)],
-    ['Device ID', session.deviceId ?? EMPTY],
-    ['Architecture', architectureLabel(session)],
-    ['Prestaged', session.prestaged == null ? EMPTY : session.prestaged ? 'Yes' : 'No'],
-    ['First seen', formatDateTime(session.firstSeen)],
-    ['Last seen', formatDateTime(session.lastSeen)],
+function SessionDetail({ session, device, imageName, unattendExpected, standalone, onPrestage }: SessionDetailProps) {
+  const facts: { label: string; value: ReactNode }[] = [
+    ...(device ? [{ label: 'Device', value: String(device.DeviceName) }] : []),
+    {
+      label: 'MAC address',
+      value: session.macAddress ? <CopyValue value={session.macAddress} label="Copy the MAC address" monospace /> : EMPTY,
+    },
+    {
+      label: 'IP address',
+      value: session.clientIp === '0.0.0.0' ? clientAddress(session) : <CopyValue value={session.clientIp} label="Copy the IP address" />,
+    },
+    { label: 'Device ID', value: session.deviceId ? <CopyValue value={session.deviceId} label="Copy the device ID" monospace /> : EMPTY },
+    { label: 'Architecture', value: architectureLabel(session) },
+    { label: 'Boot image', value: imageName ?? EMPTY },
+    { label: 'Prestaged when it booted', value: session.prestaged == null ? EMPTY : session.prestaged ? 'Yes' : 'No' },
+    { label: 'First seen', value: formatDateTime(session.firstSeen) },
+    { label: 'Last seen', value: formatDateTime(session.lastSeen) },
   ]
 
   return (
@@ -245,32 +354,46 @@ function SessionDetail({ session, unattendExpected, standalone, onPrestage }: Se
           ))}
       {session.notes.some((note) => note.kind === 'notRecognized') && (
         <Alert color="orange" icon={<IconAlertTriangle />} title="WDS ignored this client">
-          It isn't prestaged, and WDS answers only known clients. Prestage it below, or let WDS answer all clients under{' '}
-          <Anchor component={Link} to="/server" inherit>
-            Server settings → PXE response
-          </Anchor>
-          .
+          {device ? (
+            "It wasn't prestaged then, and WDS answers only known clients. It's prestaged now, so WDS answers it next time."
+          ) : (
+            <>
+              It isn't prestaged, and WDS answers only known clients. Prestage it below, or let WDS answer all clients under{' '}
+              <Anchor component={Link} to="/server" inherit>
+                Server settings → PXE response
+              </Anchor>
+              .
+            </>
+          )}
         </Alert>
       )}
-      {session.prestaged !== true && (session.deviceId || session.macAddress) && (
-        <Group>
-          <Button variant="light" leftSection={<IconDeviceDesktopPlus size={16} />} onClick={onPrestage}>
-            Prestage this device
-          </Button>
-        </Group>
-      )}
+      {device
+        ? session.prestaged === false && (
+            <Text size="sm">
+              Prestaged since this boot, as{' '}
+              <Anchor component={Link} to="/devices" inherit>
+                {String(device.DeviceName)}
+              </Anchor>
+              .
+            </Text>
+          )
+        : (session.deviceId || session.macAddress) && (
+            <Group>
+              <Button variant="light" leftSection={<IconDeviceDesktopPlus size={16} />} onClick={onPrestage}>
+                Prestage this device
+              </Button>
+            </Group>
+          )}
       <Table withRowBorders={false} verticalSpacing={4}>
         <Table.Tbody>
-          {facts.map(([label, value]) => (
+          {facts.map(({ label, value }) => (
             <Table.Tr key={label}>
-              <Table.Td w={160}>
+              <Table.Td w={180}>
                 <Text size="sm" c="dimmed">
                   {label}
                 </Text>
               </Table.Td>
-              <Table.Td>
-                <Text size="sm">{value}</Text>
-              </Table.Td>
+              <Table.Td>{typeof value === 'string' ? <Text size="sm">{value}</Text> : value}</Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

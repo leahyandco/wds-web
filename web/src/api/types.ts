@@ -378,7 +378,10 @@ export interface WdsEvent {
 }
 
 export interface EventsResponse {
+  /** The newest of the matching events, as many as were asked for. */
   events: WdsEvent[]
+  /** How many events matched, which can be more than `events` holds. */
+  total: number
   /** Routine TFTP and management-call events left out of `events`. */
   routineHidden: number
   warnings: string[]
@@ -397,6 +400,8 @@ export interface TftpTransfer {
 
 /** One client's PXE boot and the files it then fetched over TFTP. */
 export interface BootSession {
+  /** Stays the same as the boot goes on, so it can be followed and linked to. */
+  id: string
   clientIp: string
   macAddress: string | null
   deviceId: string | null

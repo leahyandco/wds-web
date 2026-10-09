@@ -1,4 +1,4 @@
-import { Anchor, Badge, Card, Group, Progress, SimpleGrid, Stack, Table, Text, ThemeIcon, Title } from '@mantine/core'
+import { Anchor, Badge, Card, Group, NavLink, Progress, SimpleGrid, Stack, Table, Text, ThemeIcon, Title } from '@mantine/core'
 import {
   IconAlertTriangle,
   IconCircleCheck,
@@ -12,15 +12,17 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useActivity, useBootImages, useDevices, useEvents, useInstallImages, useServerConfig, useTarget } from '../api/queries'
-import type { BootSession, ServerConfig, TargetInfo, WdsEvent } from '../api/types'
+import type { BootSession, ServerConfig, TargetInfo, WdsEvent, WdsRecord } from '../api/types'
 import { BootStatusBadge } from '../components/BootStatusBadge'
 import { DeploymentStageBadge } from '../components/DeploymentStageBadge'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
 import { StatCard } from '../components/StatCard'
-import { baseName, clientAddress } from '../lib/boot'
-import { isProblem, levelColor } from '../lib/events'
+import { clientAddress } from '../lib/boot'
+import { bootImageName, prestagedDevice } from '../lib/devices'
+import { eventKey, isExpectedWarning, levelColor } from '../lib/events'
 import { EMPTY, formatAgo, formatBytes, formatDateTime, plural } from '../lib/format'
+import { findValue, isYes } from '../lib/wdsutil'
 
 export function DashboardPage() {
   const target = useTarget()
@@ -29,11 +31,27 @@ export function DashboardPage() {
   const installImages = useInstallImages()
   const devices = useDevices()
   const activity = useActivity(72)
-  const events = useEvents(24)
+  const events = useEvents(24, { problemsOnly: true })
 
   const service = target.data?.wdsService
   const pending = devices.data?.autoAdd.filter((d) => d.Status === 'Pending').length
-  const problems = events.data?.events.filter(isProblem) ?? []
+
+  // Whether WDS had a WDS client unattend file for the client whose request it refused: the server's, or its
+  // device's own. The refusal is matched to its boot by time, as Boot activity records it; when that can't be
+  // told, the refusal counts as a problem.
+  const serverUnattend = config.data ? isYes(findValue(config.data.sections, ['WDS Client Policy', 'Unattend policy', 'Enabled'])) : null
+  const unattendExpected = (event: WdsEvent) => {
+    if (serverUnattend !== false) return true
+    const time = new Date(event.time).getTime()
+    const session = activity.data?.sessions.find((s) =>
+      s.notes.some((note) => note.kind === 'unattendBlocked' && Math.abs(new Date(note.time).getTime() - time) < 1000),
+    )
+    if (!session) return true
+    const device = prestagedDevice(devices.data?.prestaged ?? [], session.macAddress, session.deviceId)
+    return String(device?.WdsClientUnattend ?? '').trim() !== ''
+  }
+  const problems = events.data?.events.filter((event) => !isExpectedWarning(event, unattendExpected)) ?? []
+  const expected = (events.data?.events.length ?? 0) - problems.length
 
   return (
     <>
@@ -64,7 +82,7 @@ export function DashboardPage() {
         />
         <StatCard
           label="Pending devices"
-          to="/devices"
+          to={pending ? '/devices?tab=requests' : '/devices'}
           icon={<IconDevices size={22} />}
           color={pending ? 'yellow' : 'blue'}
           value={statValue(devices, () => pending ?? 0)}
@@ -87,7 +105,7 @@ export function DashboardPage() {
                   No PXE boots in the last 3 days.
                 </Text>
               ) : (
-                <RecentBoots sessions={data.sessions.slice(0, 6)} />
+                <RecentBoots sessions={data.sessions.slice(0, 6)} devices={devices.data?.prestaged ?? []} bootImages={bootImages.data ?? []} />
               )
             }
           </QueryState>
@@ -104,20 +122,28 @@ export function DashboardPage() {
       <Card withBorder padding="lg">
         <Group justify="space-between" mb="sm">
           <Title order={4}>Problems in the last 24 hours</Title>
-          <Anchor component={Link} to="/events" size="sm">
+          <Anchor component={Link} to="/events?level=problems" size="sm">
             All events
           </Anchor>
         </Group>
         <QueryState query={events}>
-          {() =>
-            problems.length === 0 ? (
-              <Text c="dimmed" size="sm">
-                No errors or warnings.
-              </Text>
-            ) : (
-              <ProblemList events={problems.slice(0, 6)} />
-            )
-          }
+          {() => (
+            <Stack gap="xs">
+              {problems.length === 0 ? (
+                <Text c="dimmed" size="sm">
+                  No errors or warnings.
+                </Text>
+              ) : (
+                <ProblemList events={problems.slice(0, 6)} />
+              )}
+              {expected > 0 && (
+                <Text size="xs" c="dimmed">
+                  Not counted: {plural(expected, 'warning')} WDS logs in the normal run of things, such as for an install straight
+                  from the server, which Boot activity explains.
+                </Text>
+              )}
+            </Stack>
+          )}
         </QueryState>
       </Card>
     </>
@@ -130,28 +156,34 @@ function statValue<T>(query: UseQueryResult<T>, select: (data: T) => ReactNode):
   return select(query.data)
 }
 
-function RecentBoots({ sessions }: { sessions: BootSession[] }) {
+/** The latest boots, each opening its details on the Boot activity page. */
+function RecentBoots({ sessions, devices, bootImages }: { sessions: BootSession[]; devices: WdsRecord[]; bootImages: WdsRecord[] }) {
   return (
-    <Stack gap="sm">
-      {sessions.map((session) => (
-        <Group key={`${session.clientIp}-${session.firstSeen}`} justify="space-between" wrap="nowrap" align="flex-start">
-          <div style={{ minWidth: 0 }}>
-            <Text size="sm" ff="monospace">
-              {session.macAddress ?? session.clientIp}
-            </Text>
-            <Text size="xs" c="dimmed">
-              {formatAgo(session.lastSeen)} · {clientAddress(session)}
-              {session.deployment?.imageName
-                ? ` · ${session.deployment.imageName}`
-                : session.bootImage
-                  ? ` · ${baseName(session.bootImage)}`
-                  : ''}
-            </Text>
-          </div>
-          {/* Once the WDS client reports an install, its stage says more than the boot's. */}
-          {session.deployment ? <DeploymentStageBadge stage={session.deployment.stage} /> : <BootStatusBadge status={session.status} />}
-        </Group>
-      ))}
+    <Stack gap={2}>
+      {sessions.map((session) => {
+        const device = prestagedDevice(devices, session.macAddress, session.deviceId)
+        const what = session.deployment?.imageName ?? (session.bootImage ? bootImageName(bootImages, session.bootImage) : null)
+        return (
+          <NavLink
+            key={session.id}
+            component={Link}
+            to={`/activity?boot=${encodeURIComponent(session.id)}`}
+            px={6}
+            label={
+              device ? (
+                String(device.DeviceName)
+              ) : (
+                <Text size="sm" ff="monospace" span>
+                  {session.macAddress ?? session.clientIp}
+                </Text>
+              )
+            }
+            description={[formatAgo(session.lastSeen), clientAddress(session), what].filter(Boolean).join(' · ')}
+            // Once the WDS client reports an install, its stage says more than the boot's.
+            rightSection={session.deployment ? <DeploymentStageBadge stage={session.deployment.stage} /> : <BootStatusBadge status={session.status} />}
+          />
+        )
+      })}
     </Stack>
   )
 }
@@ -214,23 +246,29 @@ function ServerFacts({ target, config }: { target: TargetInfo; config: ServerCon
   )
 }
 
+
+/** Errors and warnings, each opening on the Events page. */
 function ProblemList({ events }: { events: WdsEvent[] }) {
   return (
-    <Stack gap="sm">
+    <Stack gap={2}>
       {events.map((event) => (
-        <Group key={`${event.log}-${event.recordId}`} wrap="nowrap" align="flex-start" gap="sm">
-          <ThemeIcon size="sm" variant="light" color={levelColor(event.level)}>
-            <IconAlertTriangle size={14} />
-          </ThemeIcon>
-          <div style={{ minWidth: 0 }}>
+        <NavLink
+          key={eventKey(event)}
+          component={Link}
+          to={`/events?${new URLSearchParams({ level: 'problems', event: eventKey(event) })}`}
+          px={6}
+          leftSection={
+            <ThemeIcon size="sm" variant="light" color={levelColor(event.level)}>
+              <IconAlertTriangle size={14} />
+            </ThemeIcon>
+          }
+          label={
             <Text size="sm" lineClamp={2}>
               {event.message ?? `Event ${event.id}`}
             </Text>
-            <Text size="xs" c="dimmed">
-              {formatDateTime(event.time)} · {event.provider} · ID {event.id}
-            </Text>
-          </div>
-        </Group>
+          }
+          description={`${formatDateTime(event.time)} · ${event.provider} · ID ${event.id}`}
+        />
       ))}
     </Stack>
   )

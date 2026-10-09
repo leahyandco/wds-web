@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiSend } from './client'
 import type {
   ActivityResponse,
@@ -108,17 +108,30 @@ export const useDrivers = () =>
     staleTime: 5 * 60_000,
   })
 
+/** Prestaged devices and device requests, polled while new requests can arrive (the pending-device policy is on). */
 export const useDevices = () =>
   useQuery({
     queryKey: ['devices'],
     queryFn: ({ signal }) => apiGet<Devices>('/devices', signal),
+    refetchInterval: (query) => (query.state.data?.pendingPolicyEnabled ? 10_000 : false),
   })
 
-export const useEvents = (hours: number, includeRoutine = false) =>
+export interface EventsOptions {
+  includeRoutine?: boolean
+  /** Only critical events, errors and warnings, filtered on the server so the limit counts only those. */
+  problemsOnly?: boolean
+  /** The most events to fetch, newest first. */
+  max?: number
+}
+
+export const useEvents = (hours: number, { includeRoutine = false, problemsOnly = false, max = 300 }: EventsOptions = {}) =>
   useQuery({
-    queryKey: ['events', hours, includeRoutine],
-    queryFn: ({ signal }) => apiGet<EventsResponse>(`/events?hours=${hours}&routine=${includeRoutine}`, signal),
+    queryKey: ['events', hours, includeRoutine, problemsOnly, max],
+    queryFn: ({ signal }) =>
+      apiGet<EventsResponse>(`/events?hours=${hours}&routine=${includeRoutine}&problems=${problemsOnly}&max=${max}`, signal),
     refetchInterval: 30_000,
+    // Keep the list on screen while another range or limit loads.
+    placeholderData: keepPreviousData,
   })
 
 /** PXE boots, refreshed often enough to watch a client come up. */

@@ -1,11 +1,13 @@
-import { Alert, Badge, Card, Code, Drawer, Group, SegmentedControl, Stack, Switch, Table, Text, TextInput } from '@mantine/core'
-import { IconAlertTriangle, IconSearch } from '@tabler/icons-react'
+import { Alert, Badge, Button, Card, Drawer, Group, SegmentedControl, Stack, Switch, Table, Text, TextInput } from '@mantine/core'
+import { IconAlertTriangle, IconInfoCircle, IconSearch } from '@tabler/icons-react'
 import { useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { useEvents } from '../api/queries'
 import type { WdsEvent } from '../api/types'
+import { CopyCode } from '../components/Copy'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
-import { isProblem, levelColor, levelLabel, sourceLabel } from '../lib/events'
+import { eventKey, isProblem, levelColor, levelLabel, sourceLabel } from '../lib/events'
 import { formatDateTime, plural } from '../lib/format'
 
 const ranges = [
@@ -15,13 +17,36 @@ const ranges = [
   { label: '30 days', value: '720' },
 ]
 
+/** How many events to fetch, newest first: a page's worth, then more on asking, up to what the server allows. */
+const limits = [300, 1000, 5000]
+
 export function EventsPage() {
   const [hours, setHours] = useState('72')
-  const [problemsOnly, setProblemsOnly] = useState(false)
+  // The level filter and the open event are in the address, so the dashboard can link to a problem.
+  const [params, setParams] = useSearchParams()
+  const problemsOnly = params.get('level') === 'problems'
+  const openKey = params.get('event')
   const [search, setSearch] = useState('')
   const [includeRoutine, setIncludeRoutine] = useState(false)
-  const [selected, setSelected] = useState<WdsEvent | null>(null)
-  const query = useEvents(Number(hours), includeRoutine)
+  const [max, setMax] = useState(limits[0])
+  const query = useEvents(Number(hours), { includeRoutine, problemsOnly, max })
+
+  const setParam = (name: string, value: string | null) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (value) next.set(name, value)
+        else next.delete(name)
+        return next
+      },
+      { replace: true },
+    )
+
+  // The open event as last loaded; it stays open if a refresh or another filter no longer lists it.
+  const found = openKey ? query.data?.events.find((event) => eventKey(event) === openKey) : undefined
+  const [kept, setKept] = useState<WdsEvent | null>(null)
+  if (found && found !== kept) setKept(found)
+  const selected = found ?? (kept && eventKey(kept) === openKey ? kept : null)
 
   return (
     <>
@@ -40,10 +65,11 @@ export function EventsPage() {
             { label: 'Errors and warnings', value: 'problems' },
           ]}
           value={problemsOnly ? 'problems' : 'all'}
-          onChange={(value) => setProblemsOnly(value === 'problems')}
+          onChange={(value) => setParam('level', value === 'problems' ? 'problems' : null)}
         />
         <TextInput
           placeholder="Search messages, IDs and sources"
+          aria-label="Search events"
           leftSection={<IconSearch size={16} />}
           value={search}
           onChange={(event) => setSearch(event.currentTarget.value)}
@@ -57,13 +83,15 @@ export function EventsPage() {
       </Group>
 
       <QueryState query={query}>
-        {({ events, routineHidden, warnings }) => {
+        {({ events, total, routineHidden, warnings }) => {
           const needle = search.trim().toLowerCase()
+          // The server filters problems too; this also covers the old list shown while a new one loads.
           const visible = events.filter(
             (event) =>
               (!problemsOnly || isProblem(event)) &&
               (!needle || `${event.message ?? ''} ${event.id} ${event.provider} ${event.log}`.toLowerCase().includes(needle)),
           )
+          const more = limits.find((limit) => limit > max)
           return (
             <Stack>
               {warnings.map((warning) => (
@@ -71,16 +99,31 @@ export function EventsPage() {
                   {warning}
                 </Alert>
               ))}
+              {total > events.length && (
+                <Alert color="blue" icon={<IconInfoCircle />} p="xs">
+                  <Group justify="space-between" wrap="nowrap" gap="sm">
+                    <Text size="sm">
+                      Showing the newest {events.length.toLocaleString()} of {plural(total, 'event')} in this period
+                      {needle ? '; the search looks only at those' : ''}.
+                    </Text>
+                    {more && (
+                      <Button size="compact-sm" variant="light" onClick={() => setMax(more)} loading={query.isFetching}>
+                        Show up to {more.toLocaleString()}
+                      </Button>
+                    )}
+                  </Group>
+                </Alert>
+              )}
               <Card withBorder p={0}>
                 {visible.length === 0 ? (
                   <Text c="dimmed" ta="center" py="xl">
                     No events match.
                   </Text>
                 ) : (
-                  <EventTable events={visible} onSelect={setSelected} />
+                  <EventTable events={visible} onSelect={(event) => setParam('event', eventKey(event))} />
                 )}
               </Card>
-              {routineHidden > 0 && (
+              {routineHidden > 0 && !problemsOnly && (
                 <Text size="sm" c="dimmed">
                   {plural(routineHidden, 'routine event')} hidden: TFTP housekeeping and management calls, including this
                   console's own. Turn on "Routine events" to see them.
@@ -93,7 +136,7 @@ export function EventsPage() {
 
       <Drawer
         opened={selected !== null}
-        onClose={() => setSelected(null)}
+        onClose={() => setParam('event', null)}
         position="right"
         size="lg"
         title={selected ? `Event ${selected.id}` : undefined}
@@ -120,7 +163,7 @@ function EventTable({ events, onSelect }: { events: WdsEvent[]; onSelect: (event
         <Table.Tbody>
           {events.map((event) => (
             <Table.Tr
-              key={`${event.log}-${event.recordId}`}
+              key={eventKey(event)}
               tabIndex={0}
               style={{ cursor: 'pointer' }}
               onClick={() => onSelect(event)}
@@ -170,7 +213,7 @@ function EventDetail({ event }: { event: WdsEvent }) {
       <Text size="sm">
         <b>Log:</b> {event.log}
       </Text>
-      <Code block>{event.message ?? 'This event has no message text.'}</Code>
+      <CopyCode value={event.message ?? 'This event has no message text.'} label="Copy the message" />
       {Object.keys(event.data).length > 0 && (
         <Table withRowBorders={false} verticalSpacing={2}>
           <Table.Tbody>

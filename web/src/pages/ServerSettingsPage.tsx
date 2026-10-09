@@ -1,4 +1,4 @@
-import { Accordion, Alert, Button, Card, Code, Group, Modal, Progress, SimpleGrid, Stack, Text } from '@mantine/core'
+import { Accordion, Alert, Button, Card, Group, Modal, Progress, SimpleGrid, Stack, Text } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconAlertTriangle, IconPencil, IconRotateClockwise } from '@tabler/icons-react'
 import { useState } from 'react'
@@ -6,6 +6,7 @@ import { useRestartWds, useServerConfig } from '../api/queries'
 import type { ServerConfig, SettingsGroup } from '../api/types'
 import { ConfigRows } from '../components/ConfigRows'
 import { ConsoleCard } from '../components/ConsoleCard'
+import { CopyCode } from '../components/Copy'
 import { HandsFreeDialog } from '../components/HandsFreeDialog'
 import { PageHeader } from '../components/PageHeader'
 import { QueryState } from '../components/QueryState'
@@ -127,7 +128,7 @@ function Settings({ config }: { config: ServerConfig }) {
         <Accordion.Item value="raw">
           <Accordion.Control>Raw WDSUTIL output</Accordion.Control>
           <Accordion.Panel>
-            <Code block>{config.raw}</Code>
+            <CopyCode value={config.raw} label="Copy the WDSUTIL output" />
           </Accordion.Panel>
         </Accordion.Item>
       </Accordion>

@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Code, Drawer, Group, List, Loader, Stack, Text } from '@mantine/core'
+import { Alert, Badge, Button, Card, Drawer, Group, List, Loader, Stack, Text } from '@mantine/core'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
@@ -6,6 +6,7 @@ import { useJobs } from '../api/queries'
 import type { BootImageDriversResult, DriverImportResult, ImportJob, ImportKind, JobStatus } from '../api/types'
 import { formatAgo, formatDateTime, formatDuration } from '../lib/format'
 import { useNow } from '../lib/useNow'
+import { CopyCode } from './Copy'
 
 const statusBadges: Record<JobStatus, { label: string; color: string }> = {
   queued: { label: 'Queued', color: 'gray' },
@@ -141,11 +142,10 @@ function JobLog({ job }: { job: ImportJob }) {
           </Text>
         </>
       )}
-      <Code block>
-        {job.log.length === 0
-          ? 'Nothing logged yet.'
-          : job.log.map((line) => `${formatDateTime(line.time)}  ${line.text}`).join('\n')}
-      </Code>
+      <CopyCode
+        value={job.log.length === 0 ? 'Nothing logged yet.' : job.log.map((line) => `${formatDateTime(line.time)}  ${line.text}`).join('\n')}
+        label="Copy the log"
+      />
     </Stack>
   )
 }

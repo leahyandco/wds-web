@@ -8,6 +8,7 @@ import { bootImageChoices, isDeviceName } from '../lib/devices'
 import { asNumber, asString } from '../lib/records'
 import { findValue } from '../lib/wdsutil'
 import { JoinDomainSwitch } from './DeviceEditor'
+import { DialogForm } from './DialogForm'
 
 const NONE = '\u0000none'
 
@@ -128,7 +129,14 @@ export function RequestActionsMenu({ request }: { request: WdsRecord }) {
       busy={answer.isPending}
       dialogs={
         <>
-          <Modal opened={dialog === 'approve'} onClose={() => setDialog(null)} title={`Approve ${label}`} centered size="lg">
+          <Modal
+            opened={dialog === 'approve'}
+            onClose={() => setDialog(null)}
+            title={`Approve ${label}`}
+            centered
+            size="lg"
+            closeOnClickOutside={false}
+          >
             {dialog === 'approve' && <ApproveForm requestId={requestId} label={label} onDone={() => setDialog(null)} />}
           </Modal>
           <Modal opened={dialog === 'reject'} onClose={() => setDialog(null)} title={`Reject ${label}?`} centered>
@@ -193,7 +201,7 @@ function ApproveForm({ requestId, label, onDone }: { requestId: number; label: s
   }
 
   return (
-    <Stack>
+    <DialogForm onSubmit={() => void approve()} canSubmit={!nameProblem}>
       <Text size="sm" c="dimmed">
         The client is waiting at its PXE screen and carries on booting the next time it checks. Anything left empty follows the
         server's settings.
@@ -231,11 +239,11 @@ function ApproveForm({ requestId, label, onDone }: { requestId: number; label: s
         <Button variant="default" onClick={onDone}>
           Cancel
         </Button>
-        <Button onClick={approve} loading={answer.isPending} disabled={!!nameProblem}>
+        <Button type="submit" loading={answer.isPending} disabled={!!nameProblem}>
           Approve
         </Button>
       </Group>
-    </Stack>
+    </DialogForm>
   )
 }
 

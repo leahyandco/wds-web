@@ -1,7 +1,8 @@
 # PXE boots (4096), TFTP downloads started, completed and failed (4099/4100/4101), and, with WDS client
 # logging on, the WDS client's own events (4102-4132 here, 4113/4114 in the Admin log), with their
-# named fields. The web service pieces these into per-client boot sessions. Also reports how far back
-# the Operational log reaches, since it is small and circular.
+# named fields and record numbers. The web service pieces these into per-client boot sessions, each
+# named after the record that started it. Also reports how far back the Operational log reaches, since
+# it is small and circular.
 param([int] $Hours = 72)
 $ErrorActionPreference = 'Stop'
 
@@ -40,10 +41,10 @@ ConvertTo-WdsJson ([ordered]@{
     logMaxBytes = $log.MaximumSizeInBytes
     events      = @(
         $records | ForEach-Object {
-            [ordered]@{ time = $_.TimeCreated.ToUniversalTime().ToString('o'); id = $_.Id; data = Get-WdsEventData $_ }
+            [ordered]@{ time = $_.TimeCreated.ToUniversalTime().ToString('o'); id = $_.Id; recordId = $_.RecordId; data = Get-WdsEventData $_ }
         }
         $blocked | ForEach-Object {
-            [ordered]@{ time = $_.TimeCreated.ToUniversalTime().ToString('o'); id = $_.Id; data = [ordered]@{ ClientIP = "$($_.Properties[0].Value)" } }
+            [ordered]@{ time = $_.TimeCreated.ToUniversalTime().ToString('o'); id = $_.Id; recordId = $_.RecordId; data = [ordered]@{ ClientIP = "$($_.Properties[0].Value)" } }
         }
     )
 })

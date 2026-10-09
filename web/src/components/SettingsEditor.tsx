@@ -23,6 +23,7 @@ import type { ServerConfig, SettingsGroup, WdsRecord } from '../api/types'
 import { formatDuration } from '../lib/format'
 import { ARCHITECTURES, bootFolder, bootsEfi, promptOptions, sameText } from '../lib/settings'
 import { architectureValues, findNode, findValue, isYes, leadingNumber } from '../lib/wdsutil'
+import { DialogForm } from './DialogForm'
 
 const titles: Record<SettingsGroup, string> = {
   pxe: 'PXE response',
@@ -43,7 +44,13 @@ interface FormProps {
 /** A form for one group of server settings, prefilled from the current WDSUTIL report. */
 export function SettingsEditor({ group, config, onClose }: { group: SettingsGroup | null; config: ServerConfig; onClose: () => void }) {
   return (
-    <Modal opened={group !== null} onClose={onClose} title={group ? titles[group] : ''} size={group === 'boot' || group === 'bind' ? 'xl' : 'lg'}>
+    <Modal
+      opened={group !== null}
+      onClose={onClose}
+      title={group ? titles[group] : ''}
+      size={group === 'boot' || group === 'bind' ? 'xl' : 'lg'}
+      closeOnClickOutside={false}
+    >
       {group === 'pxe' && <PxeForm config={config} onDone={onClose} />}
       {group === 'boot' && <BootForm config={config} onDone={onClose} />}
       {group === 'client' && <ClientForm config={config} onDone={onClose} />}
@@ -90,7 +97,7 @@ function SettingsForm({
   }
 
   return (
-    <Stack>
+    <DialogForm onSubmit={() => void save()} canSubmit={!unchanged && !problem}>
       {children}
       {problem && (
         <Alert color="yellow" icon={<IconAlertTriangle />}>
@@ -106,11 +113,11 @@ function SettingsForm({
         <Button variant="default" onClick={onDone}>
           Cancel
         </Button>
-        <Button onClick={save} loading={apply.isPending} disabled={unchanged || !!problem}>
+        <Button type="submit" loading={apply.isPending} disabled={unchanged || !!problem}>
           Save
         </Button>
       </Group>
-    </Stack>
+    </DialogForm>
   )
 }
 

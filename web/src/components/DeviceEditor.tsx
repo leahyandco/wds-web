@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Loader, Modal, SegmentedControl, Select, Stack, Switch, Text, TextInput } from '@mantine/core'
+import { Alert, Button, Group, Loader, Modal, SegmentedControl, Select, Switch, Text, TextInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useState } from 'react'
@@ -7,6 +7,7 @@ import type { DeviceChanges, WdsRecord } from '../api/types'
 import { bootImageChoices, devicePrompt, isDeviceId, isDeviceName, isPlaceholderGuid } from '../lib/devices'
 import { asString } from '../lib/records'
 import { promptOptions, sameText } from '../lib/settings'
+import { DialogForm } from './DialogForm'
 import { findValue } from '../lib/wdsutil'
 
 const NONE = '\u0000none'
@@ -28,7 +29,13 @@ interface DeviceEditorProps {
 /** Prestages a device, or changes one's ID, group, PXE prompt, boot image, WDS client unattend file and domain join. */
 export function DeviceEditor({ opened, device, seed, onClose }: DeviceEditorProps) {
   return (
-    <Modal opened={opened} onClose={onClose} title={device ? `Change ${String(device.DeviceName)}` : 'Prestage a device'} size="lg">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={device ? `Change ${String(device.DeviceName)}` : 'Prestage a device'}
+      size="lg"
+      closeOnClickOutside={false}
+    >
       {/* Mounted only while open, so each opening starts from the device as it is now. */}
       {opened && <DeviceFormLoader device={device} seed={seed} onDone={onClose} />}
     </Modal>
@@ -141,7 +148,7 @@ function DeviceForm({ device, seed, onDone, bootImages, standalone }: DeviceForm
   }
 
   return (
-    <Stack>
+    <DialogForm onSubmit={() => void save()} canSubmit={ready}>
       <TextInput
         label="Name"
         required={!device}
@@ -215,10 +222,10 @@ function DeviceForm({ device, seed, onDone, bootImages, standalone }: DeviceForm
         <Button variant="default" onClick={onDone}>
           Cancel
         </Button>
-        <Button onClick={save} loading={add.isPending || change.isPending} disabled={!ready}>
+        <Button type="submit" loading={add.isPending || change.isPending} disabled={!ready}>
           {device ? 'Save' : 'Prestage'}
         </Button>
       </Group>
-    </Stack>
+    </DialogForm>
   )
 }

@@ -24,6 +24,7 @@ import type { ImageEntry, ImageFileEntry, ImageFileInfo, ImageKind, UploadInfo }
 import { formatBytes, suggestFileName } from '../lib/format'
 import { releaseTag, windowsRelease } from '../lib/windows'
 import { ServerFilePanel, UploadPanel } from './SourcePanels'
+import { DialogForm } from './DialogForm'
 
 const GIB = 1024 ** 3
 const NEW_GROUP = '\u0000new'
@@ -295,6 +296,8 @@ function DetailsStep({
   // The compressed file is a fair upper bound for what the import adds to RemoteInstall.
   const tight = free != null && selection.file.size > free - 2 * GIB
 
+  const ready = name.trim() !== '' && fileName.trim() !== '' && (kind !== 'install' || imageGroup !== '')
+
   const submit = async () => {
     try {
       await start.mutateAsync({
@@ -316,7 +319,7 @@ function DetailsStep({
   }
 
   return (
-    <Stack mt="md">
+    <DialogForm mt="md" onSubmit={() => void submit()} canSubmit={ready}>
       <TextInput
         label="Name"
         description={kind === 'boot' ? 'Shown in the WDS boot menu' : 'Shown in the WDS client’s image list'}
@@ -375,14 +378,10 @@ function DetailsStep({
         <Button variant="default" onClick={onBack}>
           Back
         </Button>
-        <Button
-          onClick={submit}
-          loading={start.isPending}
-          disabled={!name.trim() || !fileName.trim() || (kind === 'install' && !imageGroup)}
-        >
+        <Button type="submit" loading={start.isPending} disabled={!ready}>
           Start import
         </Button>
       </Group>
-    </Stack>
+    </DialogForm>
   )
 }

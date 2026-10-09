@@ -19,6 +19,7 @@ import { useState } from 'react'
 import { useImageUnattend, useSetImageProperties, type ImageChanges, type ImageRef } from '../api/queries'
 import type { ImageKind, ImageUnattend, WdsRecord } from '../api/types'
 import { asNumber, asString } from '../lib/records'
+import { DialogForm } from './DialogForm'
 
 const DEFAULT_ORDER = 500000
 const UNATTEND_NAMESPACE = 'urn:schemas-microsoft-com:unattend'
@@ -33,7 +34,7 @@ interface ImagePropertiesDialogProps {
 /** Renames an image or changes its description and display order, and an install image's unattend file. */
 export function ImagePropertiesDialog({ kind, image, opened, onClose }: ImagePropertiesDialogProps) {
   return (
-    <Modal opened={opened} onClose={onClose} title={`${String(image.Name)}: properties`} size="xl">
+    <Modal opened={opened} onClose={onClose} title={`${String(image.Name)}: properties`} size="xl" closeOnClickOutside={false}>
       {/* Mounted only while open, so each opening starts from the image as it is now. */}
       {opened && <PropertiesForm kind={kind} image={image} onDone={onClose} />}
     </Modal>
@@ -80,7 +81,7 @@ function PropertiesForm({ kind, image, onDone }: { kind: ImageKind; image: WdsRe
   }
 
   return (
-    <Stack>
+    <DialogForm onSubmit={() => void submit()} canSubmit={!!changed && !xmlProblem}>
       <TextInput label="Name" value={newName} onChange={(e) => setNewName(e.currentTarget.value)} maxLength={128} />
       <TextInput
         label="Description"
@@ -121,11 +122,11 @@ function PropertiesForm({ kind, image, onDone }: { kind: ImageKind; image: WdsRe
         <Button variant="default" onClick={onDone}>
           Cancel
         </Button>
-        <Button onClick={submit} loading={save.isPending} disabled={!changed || !!xmlProblem}>
+        <Button type="submit" loading={save.isPending} disabled={!changed || !!xmlProblem}>
           Save
         </Button>
       </Group>
-    </Stack>
+    </DialogForm>
   )
 }
 

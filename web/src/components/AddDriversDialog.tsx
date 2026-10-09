@@ -7,6 +7,7 @@ import type { UploadInfo } from '../api/types'
 import { architectures } from '../lib/drivers'
 import { formatBytes } from '../lib/format'
 import { ServerFilePanel, UploadPanel } from './SourcePanels'
+import { DialogForm } from './DialogForm'
 
 const NO_GROUP = '\u0000none'
 const NEW_GROUP = '\u0000new'
@@ -108,7 +109,7 @@ function AddDriversForm({ groups, initialGroup, onDone }: { groups: string[]; in
   }
 
   return (
-    <Stack>
+    <DialogForm onSubmit={() => void submit()} canSubmit={!(creating && !newGroup.trim())}>
       <Card withBorder padding="sm">
         <Group justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
@@ -171,10 +172,10 @@ function AddDriversForm({ groups, initialGroup, onDone }: { groups: string[]; in
         <Button variant="default" onClick={onDone}>
           Cancel
         </Button>
-        <Button onClick={submit} loading={start.isPending} disabled={creating && !newGroup.trim()}>
+        <Button type="submit" loading={start.isPending} disabled={creating && !newGroup.trim()}>
           Add drivers
         </Button>
       </Group>
-    </Stack>
+    </DialogForm>
   )
 }

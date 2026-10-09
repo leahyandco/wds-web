@@ -1,8 +1,9 @@
 # Recent WDS events, newest first: the Deployment-Services-Diagnostics channels and the WDS services'
 # entries in the Application log. Most of the Operational channel is routine housekeeping, including a
 # record of every management call (this console's own among them), so that is left out unless
-# -IncludeRoutine is given.
-param([int] $Hours = 72, [int] $MaxEvents = 300, [switch] $IncludeRoutine)
+# -IncludeRoutine is given. -ProblemsOnly keeps critical events, errors and warnings. Only the newest
+# -MaxEvents are returned; total says how many matched.
+param([int] $Hours = 72, [int] $MaxEvents = 300, [switch] $IncludeRoutine, [switch] $ProblemsOnly)
 $ErrorActionPreference = 'Stop'
 
 # 57348/57349 TFTP read buffer created/deleted, 57350/57351 TFTP endpoint opened/closed,
@@ -35,6 +36,8 @@ $events = foreach ($query in $queries) {
 
 $routine = @($events | Where-Object { $routineIds -contains $_.Id })
 $shown = if ($IncludeRoutine) { @($events) } else { @($events | Where-Object { $routineIds -notcontains $_.Id }) }
+# Levels 1-3: critical, error, warning.
+if ($ProblemsOnly) { $shown = @($shown | Where-Object { $_.Level -ge 1 -and $_.Level -le 3 }) }
 
 $items = @($shown | Sort-Object -Property TimeCreated -Descending | Select-Object -First $MaxEvents | ForEach-Object {
     [ordered]@{
@@ -52,6 +55,7 @@ $items = @($shown | Sort-Object -Property TimeCreated -Descending | Select-Objec
 
 ConvertTo-WdsJson ([ordered]@{
     events        = $items
+    total         = $shown.Count
     routineHidden = if ($IncludeRoutine) { 0 } else { $routine.Count }
     warnings      = $warnings
 })

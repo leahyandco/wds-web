@@ -121,6 +121,7 @@ function ImageGroup({ group, images }: { group: WdsRecord; images: WdsRecord[] }
       <Card withBorder p={0}>
         <RecordTable
           rows={images}
+          rowKey={(row) => `${String(row.FileName)}|${String(row.Name)}`}
           columns={columns}
           empty="This group is empty."
           detailTitle={(row) => String(pick(row, 'Name') ?? 'Install image')}
