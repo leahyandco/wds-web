@@ -9,6 +9,8 @@ export function showDone(message: string, undo?: () => Promise<unknown>) {
   }
   const id = notifications.show({
     color: 'green',
+    // Long enough to notice a mistake and reach for Undo.
+    autoClose: 10_000,
     message: (
       <Group justify="space-between" wrap="nowrap" gap="sm">
         <Text size="sm">{message}</Text>

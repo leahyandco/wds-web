@@ -14,11 +14,13 @@ same network, and signs people in with their Windows accounts.
 
 ## Features
 
-- **Boot and install images**: import from an upload or from an ISO, WIM or ESD already on the server;
-  enable, disable, rename, reorder and remove images; give install images an unattend file.
-- **Devices**: prestage devices by MAC address or SMBIOS GUID, each with its own boot image, PXE prompt,
-  WDS client unattend file and domain join; approve or reject devices waiting for approval, and clear
-  the answered requests WDS would otherwise keep acting on.
+- **Boot and install images**: import from an upload or from an ISO, WIM or ESD already on the server,
+  several editions at a time; enable, disable, rename, reorder and remove images; give install images an
+  unattend file. Imports run in the background, and say when they're done from any page.
+- **Devices**: prestage devices by MAC address or SMBIOS GUID, one at a time or from a list, each with
+  its own boot image, PXE prompt, WDS client unattend file and domain join; approve or reject devices
+  waiting for approval, several at once, and clear the answered requests WDS would otherwise keep acting
+  on.
 - **Boot activity**: every PXE boot, how far it got (the network boot prompt, the boot menu, the boot
   image download) and what it downloaded, and with WDS client logging on, the install that followed:
   which image was chosen, by whom, how long the apply took, and any errors, updated as it goes. Search
@@ -30,6 +32,10 @@ same network, and signs people in with their Windows accounts.
   chassis type and more; enable, disable, rename, regroup and remove packages, one or many at once;
   and add packages to boot images, for network and storage drivers WinPE lacks.
 - **Events**: WDS's event logs, without the routine noise.
+- **Day to day**: search, filters and the open item are kept in the page's address, so a link shows a
+  colleague the same boot, event or driver group; devices, boots, drivers and events export to CSV;
+  enabling, disabling and regrouping can be undone from the message that confirms them; and it works
+  on a phone.
 - **Access control and audit**: Windows sign-in for the groups and users you choose, and every change
   recorded, with who made it, in the Windows event log.
 
