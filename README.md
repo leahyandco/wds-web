@@ -103,6 +103,8 @@ Then browse to `http://localhost:5080`. Nothing in the demo can be changed.
 - **The WDS server**: Windows Server with the Windows Deployment Services role, configured (tested on
   Windows Server 2025). Server settings are read from WDSUTIL's output, which is in the server's
   display language; only English is understood so far.
+- **Boot images**: Windows 11's own `boot.wim` stops at a deprecation notice instead of running the
+  WDS client; use Windows 10's, as [Windows 11 boot images](docs/windows-11-boot-images.md) explains.
 - **The machine running the console**: 64-bit Windows 10, 11 or Windows Server. Nothing else to
   install: the release includes the .NET runtime.
 - **Remote mode only**: WinRM (TCP 5985) and SMB (TCP 445) from the console's machine to the WDS server,
