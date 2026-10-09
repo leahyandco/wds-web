@@ -7,7 +7,8 @@ Setup's older pages instead (`sources\setup.exe` in the image) doesn't help: the
 **Deprecation Notice** page whose only button is **Reboot**.
 
 This is by design. Microsoft no longer lets a Windows 11 `boot.wim` run Setup in WDS mode, and
-there's no setting to turn it off; see
+there's no setting to turn it off. The check is in Setup itself, so it applies to every Windows 11
+boot image, 24H2 and 25H2 (10.0.26100) and 26H1 (10.0.28000) included; see
 [WDS boot.wim support](https://learn.microsoft.com/windows/deployment/wds-boot-support). WDS
 itself still PXE boots clients, and custom boot images, such as MDT's or a WinPE built with the
 Windows ADK, aren't affected. Neither is Setup started from a network share.
