@@ -11,7 +11,8 @@ there's no setting to turn it off. The check is in Setup itself, so it applies t
 boot image, 24H2 and 25H2 (10.0.26100) and 26H1 (10.0.28000) included; see
 [WDS boot.wim support](https://learn.microsoft.com/windows/deployment/wds-boot-support). WDS
 itself still PXE boots clients, and custom boot images, such as MDT's or a WinPE built with the
-Windows ADK, aren't affected. Neither is Setup started from a network share.
+Windows ADK, aren't affected. Neither is Setup started from a network share. The console warns you when
+you choose one of these images to import.
 
 ## Use a Windows 10 boot image
 
@@ -27,6 +28,40 @@ any other:
 
 Give the boot image a name that says what it's for, such as "Windows Setup (Windows 11)". Clients
 see the name in the boot menu, not the WinPE version.
+
+## Keep Windows 11's WinPE, with Windows 10's Setup
+
+For hardware that Windows 10's WinPE can't start, or whose disks it can't see even with drivers added,
+there's a middle way that Microsoft doesn't support. A boot image is WinPE (the kernel, drivers and
+networking) plus Setup (`setup.exe` and the `sources` folder), and only Setup has the check. So keep
+Windows 11's WinPE and give it Windows 10's Setup, which brings its own WDS client. This has been tried
+with Windows 11 26H1's WinPE (10.0.28000): the WDS client starts and asks for its sign-in as usual.
+Check a full install on your own hardware before relying on it, and build it again for each new Windows
+release.
+
+In Windows PowerShell as an administrator, where image 2 of each `boot.wim` is Windows Setup:
+
+```powershell
+# Copies of each media's sources\boot.wim
+$new = 'C:\Work\boot-win11.wim'
+$old = 'C:\Work\boot-win10.wim'
+New-Item -ItemType Directory C:\Work\new, C:\Work\old | Out-Null
+Mount-WindowsImage -ImagePath $new -Index 2 -Path C:\Work\new | Out-Null
+Mount-WindowsImage -ImagePath $old -Index 2 -Path C:\Work\old -ReadOnly | Out-Null
+
+# Some of Setup's files belong to TrustedInstaller.
+takeown /f C:\Work\new\sources /r /d y | Out-Null
+icacls C:\Work\new\sources /grant Administrators:F /t /c /q | Out-Null
+Remove-Item C:\Work\new\sources, C:\Work\new\setup.exe -Recurse -Force
+Copy-Item C:\Work\old\sources C:\Work\new\sources -Recurse
+Copy-Item C:\Work\old\setup.exe C:\Work\new\setup.exe
+
+Dismount-WindowsImage -Path C:\Work\old -Discard | Out-Null
+Dismount-WindowsImage -Path C:\Work\new -Save | Out-Null
+```
+
+Then import `boot-win11.wim` as a boot image, with a name that says what it is. The console can't see
+inside the image, so it still shows its warning about Windows 11's Setup; carry on past it.
 
 ## Other options
 

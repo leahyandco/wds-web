@@ -266,7 +266,8 @@ function ChooseStep({
         <Alert color="orange" icon={<IconAlertTriangle />} title="Windows 11's own Setup won't run the WDS client">
           Clients can boot this image, but its Setup shows a deprecation notice where the WDS client should be, and the PC
           restarts. Every boot image from Windows 11 or Windows Server 2025 media does this. To install Windows over WDS,
-          import the boot.wim from Windows 10 media (22H2) instead: its Setup runs the WDS client and installs Windows 11 too.
+          import the boot.wim from Windows 10 media (22H2) instead: its Setup runs the WDS client and installs Windows 11 too. If
+          this image's Setup has been swapped for Windows 10's already, carry on.
         </Alert>
       )}
       <Group justify="space-between">

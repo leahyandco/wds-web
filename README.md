@@ -1,43 +1,36 @@
 # WDS Console
 
-A web console for **Windows Deployment Services**. Manage boot and install images, devices and server
-settings, and watch PXE boots and installs as they happen, from any browser instead of the WDS MMC
-snap-in on the server.
+A web UI for Windows Deployment Services (WDS).
+
+Manage your boot images, install images, devices and drivers from a browser, and watch PCs PXE boot
+and install as it happens. No more remoting into the server to use the old MMC snap-in.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
   <img src="docs/images/dashboard-light.png" alt="The dashboard: the WDS service, image and device counts, recent boots with how far each install got, and problems from WDS's event logs">
 </picture>
 
-It runs as a Windows service, either on the WDS server itself or on another Windows machine on the
-same network, and signs people in with their Windows accounts.
+## Why I made this
 
-## Features
+I use WDS to image PCs. The MMC snap-in is showing its age, half the server settings are only in
+WDSUTIL, and when a PC won't PXE boot you end up digging through event logs to find out why. I wanted
+one place to do all of it, from any PC, so I built it.
 
-- **Boot and install images**: import from an upload or from an ISO, WIM or ESD already on the server,
-  several editions at a time; enable, disable, rename, reorder and remove images; give install images an
-  unattend file. Imports run in the background, and say when they're done from any page.
-- **Devices**: prestage devices by MAC address or SMBIOS GUID, one at a time or from a list, each with
-  its own boot image, PXE prompt, WDS client unattend file and domain join; approve or reject devices
-  waiting for approval, several at once, and clear the answered requests WDS would otherwise keep acting
-  on.
-- **Boot activity**: every PXE boot, how far it got (the network boot prompt, the boot menu, the boot
-  image download) and what it downloaded, and with WDS client logging on, the install that followed:
-  which image was chosen, by whom, how long the apply took, and any errors, updated as it goes. Search
-  by MAC address, IP, device name or status, and prestage a device straight from one of its boots.
-- **Server settings**: PXE response, boot programs and default boot images, the WDS client, pending
-  devices, network interfaces, TFTP and multicast, and the hands-free deployment override.
-- **Drivers**: add drivers from an uploaded .zip or .cab, or a folder on the server, a driver group at a
-  time; create driver groups and choose which clients get them with filters on manufacturer, model,
-  chassis type and more; enable, disable, rename, regroup and remove packages, one or many at once;
-  and add packages to boot images, for network and storage drivers WinPE lacks.
-- **Events**: WDS's event logs, without the routine noise.
-- **Day to day**: search, filters and the open item are kept in the page's address, so a link shows a
-  colleague the same boot, event or driver group; devices, boots, drivers and events export to CSV;
-  enabling, disabling and regrouping can be undone from the message that confirms them; and it works
-  on a phone.
-- **Access control and audit**: Windows sign-in for the groups and users you choose, and every change
-  recorded, with who made it, in the Windows event log.
+If you use it, I'd like to hear how it goes. Issues and feedback are welcome, see
+[Feedback and contributing](#feedback-and-contributing).
+
+## What it does
+
+- Import boot and install images. Upload an ISO, WIM or ESD, or use one that's already on the server.
+- Prestage devices, one at a time or a whole list from a CSV file.
+- Approve or reject devices that are waiting for approval, one or heaps at once.
+- See every PXE boot and how far it got. Turn on WDS client logging and you can follow installs live
+  too: which image, who picked it, how long it took and what went wrong.
+- Manage drivers and driver groups, and add drivers to boot images.
+- Change the WDS server settings without touching WDSUTIL.
+- Read WDS's event logs without all the noise.
+- Export lists to CSV, undo enabling, disabling and regrouping, and use it from your phone.
+- Sign in with your Windows account. Every change is logged with who made it.
 
 <table>
   <tr>
@@ -46,14 +39,14 @@ same network, and signs people in with their Windows accounts.
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/activity-dark.png">
         <img src="docs/images/activity-light.png" alt="Boot activity: each PXE boot, its boot image download and the install that followed">
       </picture>
-      <b>Boot activity</b>: every PXE boot, what it downloaded, and how far its install got.
+      <b>Boot activity</b>: every PXE boot and how far it got.
     </td>
     <td width="50%">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/install-detail-dark.png">
         <img src="docs/images/install-detail-light.png" alt="One install's details: the image chosen, by whom, and a timeline from the WDS client's events">
       </picture>
-      <b>Install details</b>: the image chosen and by whom, with a timeline from the WDS client.
+      <b>Install details</b>: the image, who picked it, and a timeline of the install.
     </td>
   </tr>
   <tr>
@@ -69,7 +62,7 @@ same network, and signs people in with their Windows accounts.
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/drivers-dark.png">
         <img src="docs/images/drivers-light.png" alt="The driver store: driver groups with their filters, and packages by class, version and date">
       </picture>
-      <b>Drivers</b>: add drivers, group them, and choose which clients get each group.
+      <b>Drivers</b>: add drivers, group them and pick which PCs get them.
     </td>
   </tr>
   <tr>
@@ -85,145 +78,225 @@ same network, and signs people in with their Windows accounts.
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/server-settings-dark.png">
         <img src="docs/images/server-settings-light.png" alt="Server settings: mode, PXE response, hands-free deployment, RemoteInstall space and every WDS policy">
       </picture>
-      <b>Server settings</b>: every WDS policy, editable a section at a time.
+      <b>Server settings</b>: the WDS server settings, one section at a time.
     </td>
   </tr>
 </table>
 
-These pictures come from the console's demo mode, which shows a made-up WDS server.
+## Try the demo first
 
-## Try it without a WDS server
+Want a look before you install anything? There's a demo mode with a fake WDS server. It runs on any
+64-bit Windows PC, doesn't need WDS, and can't change anything.
 
-Demo mode runs the console against a sample WDS server (WDS01 in contoso.com) with images, devices,
-drivers and boots at every stage, so you can look around before installing anything. Extract the
-release on any 64-bit Windows machine that doesn't have the console installed, and run:
-
-```powershell
-.\app\WdsWeb.Api.exe --Wds:Mode=Demo --urls=http://localhost:5080
-```
-
-Then browse to `http://localhost:5080`. Nothing in the demo can be changed.
-
-## Requirements
-
-- **The WDS server**: Windows Server with the Windows Deployment Services role, configured (tested on
-  Windows Server 2025). Server settings are read from WDSUTIL's output, which is in the server's
-  display language; only English is understood so far.
-- **Boot images**: Windows 11's own `boot.wim` stops at a deprecation notice instead of running the
-  WDS client; use Windows 10's, as [Windows 11 boot images](docs/windows-11-boot-images.md) explains.
-- **The machine running the console**: 64-bit Windows 10, 11 or Windows Server. Nothing else to
-  install: the release includes the .NET runtime.
-- **Remote mode only**: WinRM (TCP 5985) and SMB (TCP 445) from the console's machine to the WDS server,
-  and an account that's an administrator on the WDS server.
-
-## Installing
-
-1. Download `WdsWeb-<version>-win-x64.zip` from the releases page. Windows marks downloaded scripts
-   as untrusted, so unblock the zip first (right-click → Properties → Unblock, or
-   `Unblock-File .\WdsWeb-*.zip`), then extract it.
-2. Open **Windows PowerShell as administrator** in the extracted folder.
-3. Run the installer.
-
-   On the WDS server:
+1. Download `WdsWeb-<version>-win-x64.zip` from the
+   [latest release](https://github.com/leahyandco/wds-web/releases/latest).
+2. Right-click the zip, choose **Properties**, tick **Unblock** and click **OK**.
+3. Extract it somewhere, like `C:\Temp\WdsWeb`.
+4. Open that folder in File Explorer, click the address bar, type `powershell` and press Enter. That
+   opens PowerShell in the folder. Then run:
 
    ```powershell
-   .\Install-WdsWeb.ps1 -AllowedGroups 'CONTOSO\WDS Admins'
+   .\app\WdsWeb.Api.exe --Wds:Mode=Demo --urls=http://localhost:5080
    ```
 
-   Or on another Windows machine, managing the WDS server over the network:
+5. Open http://localhost:5080 in your browser.
+
+Press Ctrl+C in the PowerShell window when you're done. Don't run the demo on a PC that already has the
+console installed, it'll pick up the real settings.
+
+## What you need
+
+- A Windows Server with the WDS role installed and set up. I've tested it on Windows Server 2025.
+- The server's display language set to English. The console reads WDSUTIL's output, and it only
+  understands English for now.
+- An account that's an administrator on the WDS server.
+- A boot image that works with WDS. Windows 11's own `boot.wim` doesn't anymore, so use Windows 10's.
+  [Windows 11 boot images](docs/windows-11-boot-images.md) explains why and what else you can do.
+
+## Install it
+
+The easiest way is to install it straight on the WDS server. If you'd rather run it on a different
+machine, do these steps there and then read [Running it on another machine](#running-it-on-another-machine).
+
+1. Download `WdsWeb-<version>-win-x64.zip` from the
+   [latest release](https://github.com/leahyandco/wds-web/releases/latest).
+2. Right-click the zip, choose **Properties**, tick **Unblock** and click **OK**. Windows blocks scripts
+   that come from the internet, and the installer won't run if you skip this.
+3. Extract the zip, for example to `C:\Temp\WdsWeb`.
+4. Open the Start menu, type **Windows PowerShell**, right-click it and choose **Run as administrator**.
+   It has to be Windows PowerShell, not PowerShell 7.
+5. Go to the folder you extracted:
 
    ```powershell
-   .\Install-WdsWeb.ps1 -WdsServer wds01 -Credential (Get-Credential CONTOSO\svc-wds) -AllowedGroups 'CONTOSO\WDS Admins'
+   cd C:\Temp\WdsWeb
    ```
 
-4. Browse to `https://<that machine>:8443/` and sign in with a Windows account, such as
-   `CONTOSO\jdoe` or `jdoe@contoso.com`.
+6. Run the installer:
 
-The installer creates the **WdsWeb** service (running as LocalSystem), a self-signed HTTPS certificate,
-a firewall rule for the port, and `C:\ProgramData\WdsWeb\settings.json`. It finishes by checking
-that the service can actually manage WDS, and says what's wrong if it can't. Run
-`Get-Help .\Install-WdsWeb.ps1 -Full` for every option.
+   ```powershell
+   .\Install-WdsWeb.ps1
+   ```
 
-### Who can sign in
+   That lets anyone in the server's local Administrators group sign in. To let a domain group in
+   instead, add its name:
 
-Only members of the groups and the users you allow. With none given, that's the local Administrators
-group of the machine the console runs on. Give groups, users or both; each run replaces the list:
+   ```powershell
+   .\Install-WdsWeb.ps1 -AllowedGroups 'YOURDOMAIN\WDS Admins'
+   ```
+
+7. When it's done it prints the address, something like `https://wds01:8443/`. Open that in a browser
+   on any PC on your network and sign in with your Windows account, either `YOURDOMAIN\you` or
+   `you@yourdomain.com`.
+
+Your browser will say the connection isn't private. That's normal, the installer made its own
+certificate. See [Getting rid of the certificate warning](#getting-rid-of-the-certificate-warning).
+
+What the installer does: copies the program to `C:\Program Files\WdsWeb`, creates a Windows service
+called **WdsWeb**, makes a self-signed HTTPS certificate, opens port 8443 in the firewall and saves its
+settings in `C:\ProgramData\WdsWeb\settings.json`. Then it checks the console can actually talk to WDS,
+and tells you what's wrong if it can't.
+
+## Who can sign in
+
+Out of the box, only the local Administrators group on the machine the console runs on. To change it,
+run the installer again with the groups or users you want. Each run replaces the whole list:
 
 ```powershell
-.\Install-WdsWeb.ps1 -AllowedGroups 'CONTOSO\WDS Admins', 'CONTOSO\Helpdesk' -AllowedUsers 'CONTOSO\jdoe'
+.\Install-WdsWeb.ps1 -AllowedGroups 'YOURDOMAIN\WDS Admins', 'YOURDOMAIN\Helpdesk' -AllowedUsers 'YOURDOMAIN\jsmith'
 ```
 
-Or edit `Auth` in `C:\ProgramData\WdsWeb\settings.json` and restart the WdsWeb service. Accounts are
-checked by the machine the console runs on, so domain accounts work wherever that machine is in the
-domain, and local accounts are that machine's own. The console's Server settings page shows who's
-allowed, and flags any name Windows can't find.
+## Running it on another machine
 
-### Remote mode
+You don't have to put it on the WDS server. You can install it on another Windows PC or server and point
+it at the WDS server instead. That's called Remote mode. The console then manages WDS over the network,
+so WinRM (port 5985) and file sharing (port 445) need to be open from that machine to the WDS server.
 
-The console connects to the WDS server over WinRM, and copies uploads through SMB, as one of:
+Do the same steps as above, but run the installer like this:
 
-- **A saved account** (`-Credential`), which must be an administrator on the WDS server. Its password
-  is stored in `C:\ProgramData\WdsWeb\credential.json`, encrypted for that machine, readable only by
-  SYSTEM and Administrators.
-- **The console machine's own account**, without `-Credential`. The service runs as LocalSystem, which
-  the WDS server sees as the computer account (for example `CONTOSO\CONSOLE01$`). Add that to the WDS
-  server's Administrators group, and no password is stored anywhere.
+```powershell
+.\Install-WdsWeb.ps1 -WdsServer wds01 -Credential (Get-Credential YOURDOMAIN\svc-wds) -AllowedGroups 'YOURDOMAIN\WDS Admins'
+```
 
-If the WDS server isn't in the console machine's domain, or you name it by IP address, WinRM also needs
-it in the console machine's TrustedHosts list; add `-TrustWdsServer` to do that. Uploads go through
-the WDS server's `C$` share; to use another share, see `Wds:StagingShare` in the
-[configuration reference](docs/configuration.md).
+- `-WdsServer` is the name of your WDS server.
+- `-Credential` is an account that's an administrator on the WDS server. It'll ask for the password,
+  and saves it encrypted on this machine, where only SYSTEM and Administrators can read it.
 
-### Trusting the certificate
+Rather not store a password? Leave out `-Credential`. The console then connects as the machine's own
+computer account (like `YOURDOMAIN\CONSOLE01$`), so add that to the WDS server's local Administrators
+group.
 
-Browsers warn about the self-signed certificate until it's trusted. Either trust it on the machines
-that use the console (export it from `Cert:\LocalMachine\My`, friendly name "WDS Console", and import
-it into Trusted Root Certification Authorities), or give the installer a certificate from your own
-certificate authority: `-CertificateThumbprint <thumbprint>` of one in `Cert:\LocalMachine\My`.
+If the WDS server isn't on the same domain, or you're using its IP address instead of its name, add
+`-TrustWdsServer` as well.
 
-### Updating and removing
+If you're running it on Windows 10 or 11 and get "running scripts is disabled on this system", see
+[Something not working?](#something-not-working)
 
-To update, extract the new release and run its `Install-WdsWeb.ps1` with no parameters: settings are
-kept. To remove the console, run `Uninstall-WdsWeb.ps1`; add `-RemoveData` to delete its settings,
-keys, saved credential and certificate too. WDS itself is never touched.
+## Getting rid of the certificate warning
 
-## Configuration
+You've got two options:
 
-Everything site-specific lives in `C:\ProgramData\WdsWeb\settings.json`: which WDS server, who may
-sign in, the port and certificate, where uploads are staged and which folders to offer images from.
-The installer writes the essentials; [docs/configuration.md](docs/configuration.md) lists every
-setting. Settings can also come from environment variables, such as `Auth__AllowedGroups`.
+- **Trust the certificate the installer made.** On the machine running the console, open
+  **Manage computer certificates** from the Start menu, go to **Personal > Certificates**, right-click
+  the one with the friendly name **WDS Console** and choose **All Tasks > Export**. Don't export the
+  private key. Then on each PC that uses the console, double-click the exported file, choose
+  **Install Certificate > Local Machine** and put it in **Trusted Root Certification Authorities**. With
+  a lot of PCs, push it out with Group Policy instead.
+- **Use your own certificate.** If you've got one from your own certificate authority in the machine's
+  **Personal** store, run the installer again with its thumbprint:
+
+  ```powershell
+  .\Install-WdsWeb.ps1 -CertificateThumbprint <thumbprint>
+  ```
+
+## Updating
+
+1. Download the new release, unblock it and extract it, same as when you installed it.
+2. Wait for any image imports to finish, as updating restarts the console and cancels them.
+3. In Windows PowerShell as administrator, go to the new folder and run `.\Install-WdsWeb.ps1` with
+   nothing after it.
+
+Your settings are kept.
+
+## Uninstalling
+
+From the extracted folder, in Windows PowerShell as administrator:
+
+```powershell
+.\Uninstall-WdsWeb.ps1
+```
+
+That removes the service and the program but keeps your settings, in case you reinstall. To remove the
+lot, including the settings, any saved password and the certificate:
+
+```powershell
+.\Uninstall-WdsWeb.ps1 -RemoveData
+```
+
+Neither one touches WDS, your images or your WDS settings.
+
+## Something not working?
+
+- **"running scripts is disabled on this system".** Run this in the same PowerShell window, then try
+  again. It only affects that window:
+
+  ```powershell
+  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+  ```
+
+- **"is not digitally signed" or "cannot be loaded".** You didn't unblock the zip. Unblock it and
+  extract it again, or run `Get-ChildItem -Recurse | Unblock-File` in the extracted folder.
+- **It complains about PowerShell editions or "#requires".** You're in PowerShell 7. Open
+  **Windows PowerShell** instead.
+- **"Windows Deployment Services isn't installed on this machine".** You're not on the WDS server. Run
+  it there, or use [Remote mode](#running-it-on-another-machine).
+- **Other PCs can't open the page.** The firewall rule only covers domain and private networks, so
+  check the machine's network isn't set to Public.
+- **You can't sign in.** Your account isn't allowed. Run the installer again with your group or user
+  in `-AllowedGroups` or `-AllowedUsers`.
+- **A PC boots, then Windows Setup says WDS is "partly deprecated".** That's Windows 11's boot image.
+  Use Windows 10's, see [Windows 11 boot images](docs/windows-11-boot-images.md).
+- **Anything else.** Look in the Application event log on the machine running the console, under the
+  source **WDS Console**. If you're still stuck,
+  [open an issue](https://github.com/leahyandco/wds-web/issues).
+
+## Settings
+
+Everything lives in `C:\ProgramData\WdsWeb\settings.json`: which WDS server, who can sign in, the port,
+the certificate, where uploads go and which folders you can import images from. The installer sets the
+basics, and [docs/configuration.md](docs/configuration.md) explains every setting. Restart the
+**WdsWeb** service after you change it.
 
 ## Security
 
-- The console can do anything a WDS administrator can, so allow only the people who should.
-- Sign-in uses Windows: passwords go to Windows, never to a file or a log. Sign-in attempts are rate
-  limited, and sessions last eight hours by default.
-- Every change is logged with the user who made it, in the Application event log under the source
-  "WDS Console". Unattend files are logged by size only, as they often hold passwords.
-- The console only serves HTTPS. Its data folder, `C:\ProgramData\WdsWeb`, is readable only by
-  SYSTEM and Administrators.
-- Hands-free deployment (CVE-2026-0386) stays blocked unless you turn it on in Server settings, which
-  warns you first.
+- Anyone who can sign in can do anything a WDS admin can, so be picky about who you let in.
+- Passwords go straight to Windows. They're never saved or logged. Sign-in attempts are rate limited,
+  and you're signed out after eight hours.
+- Every change is logged in the Application event log, under the source **WDS Console**, with who made
+  it. Unattend files are only logged by size, because they often have passwords in them.
+- It's HTTPS only, and `C:\ProgramData\WdsWeb` can only be read by SYSTEM and Administrators.
+- Hands-free deployment (CVE-2026-0386) stays off unless you turn it on in Server settings, and it warns
+  you first.
 
-## How it works
+Found a security hole? Please don't open a public issue.
+[Report it privately](https://github.com/leahyandco/wds-web/security/advisories/new) instead.
 
-```
-Browser ──HTTPS──▶ WDS Console service ──PowerShell──▶ WDS server: WDS module, WDSUTIL, registry, event logs
-```
+## For developers
 
-The service is ASP.NET Core (.NET 10) serving a React frontend. The WDS PowerShell module only runs in
-Windows PowerShell 5.1, so the service never calls WDS in-process: it keeps a small pool of 5.1
-sessions on the WDS server (a local process in Local mode, WinRM in Remote mode) and runs the scripts
-in `src/WdsWeb.Api/Wds/Scripts` there. Each script takes its inputs as parameters, never as text, and
-prints one JSON document. Changes made through WDSUTIL are built and validated by the service first.
+### How it works
 
-## Development
+The backend is ASP.NET Core (.NET 10) and the front end is React. The WDS PowerShell module only works
+in Windows PowerShell 5.1, so the service doesn't load it directly. It keeps a few 5.1 sessions open on
+the WDS server (a local process in Local mode, WinRM in Remote mode) and runs the scripts in
+`src/WdsWeb.Api/Wds/Scripts` through them. Scripts get their inputs as parameters, never pasted into the
+script text, and each one prints a single JSON result. Anything that goes through WDSUTIL is built and
+checked by the service first.
 
-You need the .NET 10 SDK, Node.js 22 or later, and a WDS server to point at.
+### Running it from source
 
-The API reads your WDS server from [user secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets),
-so nothing site-specific is committed. To develop on a machine other than the WDS server:
+You need the .NET 10 SDK, Node.js 22 or later, and a WDS server to point it at.
+
+Your WDS server's details go in [user secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets),
+so nothing about your setup ends up in the repo:
 
 ```powershell
 # Your WDS server, and an administrator account for it, saved encrypted for your Windows account
@@ -232,28 +305,41 @@ dotnet user-secrets set Wds:ComputerName wds01 --project src/WdsWeb.Api
 Get-Credential | Export-Clixml "$env:APPDATA\wds-web\wds01.credential.xml"
 dotnet user-secrets set Wds:CredentialFile "%APPDATA%\wds-web\wds01.credential.xml" --project src/WdsWeb.Api
 
-# As administrator, if the server isn't in your domain: let WinRM send it a password
+# As administrator, if the server isn't on your domain: let WinRM send it a password
 Set-Item WSMan:\localhost\Client\TrustedHosts -Value 'wds01' -Concatenate -Force
 ```
 
-Then run the API and the frontend dev server:
+Then start the API and the front end:
 
 ```powershell
-dotnet run --project src/WdsWeb.Api          # http://localhost:5080; sign-in is off in development
+dotnet run --project src/WdsWeb.Api          # http://localhost:5080, sign-in is off in development
 npm ci --prefix web
-npm run dev --prefix web                      # http://localhost:5173, proxies /api to 5080
+npm run dev --prefix web                      # http://localhost:5173, sends /api to 5080
 ```
 
-Use `--launch-profile local` instead to manage WDS on the machine you're on, or `--launch-profile demo`
-to work on the frontend against the sample server, with no WDS anywhere.
+Use `--launch-profile local` to manage WDS on the machine you're on, or `--launch-profile demo` to work
+against the fake server with no WDS at all.
 
-The README's screenshots come from the demo. To retake them after changing the UI, build the frontend,
-start the demo (`dotnet run --project src/WdsWeb.Api --launch-profile demo`) and run
-`npm run screenshots --prefix web`, which drives Microsoft Edge headless at 1440×900 in both themes.
+### Tests, screenshots and releases
 
-Tests: `dotnet test WdsWeb.slnx`. Frontend checks: `npm run build --prefix web` and
-`npm run lint --prefix web`.
+- Tests: `dotnet test WdsWeb.slnx`. Front end checks: `npm run build --prefix web` and
+  `npm run lint --prefix web`.
+- Screenshots come from the demo. Build the front end, start the demo
+  (`dotnet run --project src/WdsWeb.Api --launch-profile demo`) and run `npm run screenshots --prefix web`.
+  It uses Microsoft Edge to take them at 1440x900, in light and dark.
+- `.\build\Build-Release.ps1` builds the release zip into `artifacts`.
+  `.\build\Deploy-WdsWeb.ps1 -ComputerName <machine>` builds it, copies it to a test machine over WinRM
+  and runs the installer there.
+- To publish a release, bump `<Version>` in `Directory.Build.props` and push a matching tag, like
+  `v0.1.1`. GitHub Actions builds the zip and publishes the release.
 
-To build a release package (`artifacts\WdsWeb-<version>-win-x64.zip`), run `.\build\Build-Release.ps1`.
-To try it on a test machine, `.\build\Deploy-WdsWeb.ps1 -ComputerName <machine>` builds it, copies it
-over WinRM and runs the installer there.
+## Feedback and contributing
+
+Issues and feedback are welcome. If something's broken, confusing or missing, or you've got an idea,
+[open an issue](https://github.com/leahyandco/wds-web/issues) and let me know.
+
+Pull requests are welcome too. If it's something big, open an issue first so we can talk about it.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
