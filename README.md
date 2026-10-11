@@ -6,8 +6,8 @@ Manage your boot images, install images, devices and drivers from a browser, and
 and install as it happens. No more remoting into the server to use the old MMC snap-in.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
-  <img src="docs/images/dashboard-light.png" alt="The dashboard: the WDS service, image and device counts, recent boots with how far each install got, and problems from WDS's event logs">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/demo-dark.gif">
+  <img src="docs/images/demo-light.gif" alt="A tour of the demo: the dashboard, boot activity, one install's details and timeline, boot images and drivers">
 </picture>
 
 ## Why I made this
@@ -336,10 +336,14 @@ against the fake server with no WDS at all.
 ## Feedback and contributing
 
 Issues and feedback are welcome. If something's broken, confusing or missing, or you've got an idea,
-[open an issue](https://github.com/leahyandco/wds-web/issues) and let me know.
+[open an issue](https://github.com/leahyandco/wds-web/issues/new/choose) and let me know. Questions,
+and how you're using it, go in [Discussions](https://github.com/leahyandco/wds-web/discussions).
 
 Pull requests are welcome too. If it's something big, open an issue first so we can talk about it.
 
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
+
+Maintained by [Leahy & Co](https://leahyandco.com.au/?utm_source=github). Want it set up, or need a
+feature added? I take on paid work.

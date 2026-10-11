@@ -1,0 +1,51 @@
+name: Bug report
+description: Something's broken, or doesn't work the way the README says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it. Before you post, take out anything private: server names, IP and MAC addresses, and account names.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Boot images
+        2. Click Import
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: Console version
+      description: It's at the bottom of the menu, like "WDS Console 0.1.0".
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How is it installed?
+      options:
+        - On the WDS server (Local mode)
+        - On another machine (Remote mode)
+        - Demo mode
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: The WDS server's Windows version
+      placeholder: Windows Server 2025
+  - type: textarea
+    id: events
+    attributes:
+      label: Errors from the event log
+      description: On the machine running the console, look in the Application event log under the source "WDS Console", and paste anything that looks related.
+      render: text

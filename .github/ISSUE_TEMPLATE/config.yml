@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A question, or help setting it up
+    url: https://github.com/leahyandco/wds-web/discussions
+    about: Ask in Discussions, so issues stay for bugs and ideas.
+  - name: A security problem
+    url: https://github.com/leahyandco/wds-web/security/advisories/new
+    about: Please report it privately rather than in a public issue.
