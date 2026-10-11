@@ -34,10 +34,9 @@ see the name in the boot menu, not the WinPE version.
 For hardware that Windows 10's WinPE can't start, or whose disks it can't see even with drivers added,
 there's a middle way that Microsoft doesn't support. A boot image is WinPE (the kernel, drivers and
 networking) plus Setup (`setup.exe` and the `sources` folder), and only Setup has the check. So keep
-Windows 11's WinPE and give it Windows 10's Setup, which brings its own WDS client. This has been tried
-with Windows 11 26H1's WinPE (10.0.28000): the WDS client starts and asks for its sign-in as usual.
-Check a full install on your own hardware before relying on it, and build it again for each new Windows
-release.
+Windows 11's WinPE and give it Windows 10's Setup, which brings its own WDS client. This has installed
+Windows 11 end to end on a UEFI laptop with Windows 11 26H1's WinPE (10.0.28000). Still, try it on your
+own hardware before relying on it, and build it again for each new Windows release.
 
 In Windows PowerShell as an administrator, where image 2 of each `boot.wim` is Windows Setup:
 
