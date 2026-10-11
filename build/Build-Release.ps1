@@ -60,7 +60,9 @@ $root = (Resolve-Path -LiteralPath $staging).Path
 $archive = [System.IO.Compression.ZipFile]::Open($package, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
     foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File) {
-        $entry = "$name/" + $file.FullName.Substring($root.Length + 1).Replace('\', '/')
+        # At the top of the zip, not in a folder: Windows' Extract All already makes one named after
+        # the zip, and a second inside it puts the installer a folder deeper than people look.
+        $entry = $file.FullName.Substring($root.Length + 1).Replace('\', '/')
         [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $entry, [System.IO.Compression.CompressionLevel]::Optimal)
     }
 } finally {
