@@ -12,11 +12,14 @@ using WdsWeb.Api.Auth;
 using WdsWeb.Api.Endpoints;
 using WdsWeb.Api.Wds;
 
-// A Windows service starts in System32, so look for appsettings and wwwroot next to the program instead.
+// A release keeps appsettings and wwwroot next to the program, so look there rather than in the folder
+// it was started from: System32 for the service, wherever someone ran it from for the demo. Development
+// builds have no wwwroot of their own and use the project folder.
+var besideProgram = WindowsServiceHelpers.IsWindowsService() || Directory.Exists(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
-    ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : null,
+    ContentRootPath = besideProgram ? AppContext.BaseDirectory : null,
 });
 
 // The site's own settings (which WDS server, who may sign in, the HTTPS port and certificate) live in
